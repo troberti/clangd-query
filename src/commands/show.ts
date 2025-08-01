@@ -54,7 +54,7 @@ async function hasBody(client: ClangdClient, filePath: string, startLine: number
  * @returns Human-readable text with contextual code
  * @throws Error if no symbols match the query
  */
-export async function getContextAsText(
+export async function getShowAsText(
   client: ClangdClient,
   query: string,
   logger: Logger

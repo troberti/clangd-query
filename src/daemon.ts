@@ -509,12 +509,23 @@ class ClangdDaemon {
           break;
         }
 
-        case "getContext": {
+        case "getShow": {
           const { symbol } = request.params || {};
           if (!symbol) {
             throw new Error("Missing required parameter: symbol");
           }
-          const result = await commands.getContextAsText(this.clangdClient!, symbol, requestLogger);
+          const result = await commands.getShowAsText(this.clangdClient!, symbol, requestLogger);
+          response.result = { text: result };
+          break;
+        }
+
+        case "getContext": {
+          // Keep for backward compatibility but redirect to show
+          const { symbol } = request.params || {};
+          if (!symbol) {
+            throw new Error("Missing required parameter: symbol");
+          }
+          const result = await commands.getShowAsText(this.clangdClient!, symbol, requestLogger);
           response.result = { text: result };
           break;
         }

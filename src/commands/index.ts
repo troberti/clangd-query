@@ -5,4 +5,4 @@ export { findReferencesAsText, findReferencesToSymbolAsText } from "./usages.js"
 export { getTypeHierarchyAsText } from "./hierarchy.js";
 export { getSignatureAsText } from "./signature.js";
 export { getInterfaceAsText } from "./interface.js";
-export { getContextAsText } from "./context.js";
+export { getShowAsText } from "./show.js";

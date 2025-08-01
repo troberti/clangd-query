@@ -13,7 +13,7 @@
  *
  * Commands:
  * - search <query>         Search for symbols by name (fuzzy matching)
- * - view <symbol>          View complete source code of a symbol
+ * - show <symbol>          Show complete source code of a symbol
  * - usages <symbol>        Find all references to a symbol
  * - hierarchy <symbol>     Show base and derived classes of the symbol
  * - status                 Show daemon status information
@@ -24,10 +24,10 @@
  * instance, making subsequent queries nearly instantaneous.
  *
  * Example usage:
- *   clangd-query search Scene
- *   clangd-query view LoadResources
- *   clangd-query usages Scene::StartScene
- *   clangd-query hierarchy Scene
+ *   clangd-query search GameObject
+ *   clangd-query show Update
+ *   clangd-query usages GameObject::Update
+ *   clangd-query hierarchy Character
  */
 
 import * as net from "node:net";
@@ -205,31 +205,28 @@ USAGE:
 
 COMMANDS:
   search <query>              Search for symbols by name (classes, functions, methods)
-                              Example: search "Scene" finds Scene, SceneManager, LoadScene, etc.
+                              Example: search GameObject finds GameObject, CreateGameObject, etc.
                               Note: Single symbol names only - no spaces or regex patterns
 
-  view <symbol>               View complete source code of a symbol
-                              Example: view "SceneManager" shows full class implementation
+  show <symbol>               Show complete source code and context
+                              Example: show GameObject shows full class implementation
+                              Example: show GameObject::Update shows declaration & definition
 
   usages <symbol|location>    Find all places where a symbol is used
-                              Example: usages "SceneManager" finds all uses of the SceneManager class
-                              Example: usages "include/scene.h:30:7" finds all uses at that location
+                              Example: usages GameObject finds all uses of the GameObject class
+                              Example: usages include/core/game_object.h:30:7 finds all uses at that location
 
   hierarchy <class>           Show inheritance hierarchy for a class
-                              Example: hierarchy "Scene" shows base and derived classes
+                              Example: hierarchy Character shows base and derived classes
                               Shows both parent classes (inherits from) and child classes
 
   signature <function>        Show function/method signatures with documentation
-                              Example: signature "LoadResources" shows all overloads
+                              Example: signature Update shows all overloads
                               Includes parameters, return types, and comments
 
   interface <class>           Show public interface of a class
-                              Example: interface "ResourceManager" shows public API
+                              Example: interface Engine shows public API
                               Clean view of what the class exposes to users
-
-  context <symbol>            Show contextual code around a symbol
-                              Example: context "Scene::LoadResources" shows declaration & definition
-                              Intelligently shows complete comments and function bodies
 
   logs                        Show recent daemon logs
   status                      Show daemon health and statistics
@@ -243,10 +240,10 @@ OPTIONS:
 Note: Options can appear anywhere on the command line.
 
 EXAMPLES:
-  clangd-query search Scene
-  clangd-query view LoadResources
-  clangd-query search Scene --verbose    # Options can come after the command
-  clangd-query usages SceneManager --timeout 60 --verbose
+  clangd-query search GameObject
+  clangd-query show Update
+  clangd-query search Transform --verbose    # Options can come after the command
+  clangd-query usages GameObject --timeout 60 --verbose
 
 For command-specific help, use:
   clangd-query <command> --help`);
@@ -290,8 +287,8 @@ DESCRIPTION:
 
 EXAMPLES:
   view "SceneManager"         # Shows entire class with all methods
-  view "LoadResources"        # Shows complete function implementation
-  view "ButtonView::SetSize"  # Shows specific method implementation
+  view "Update"               # Shows complete function implementation
+  view "GameObject::Update"   # Shows specific method implementation
 
 TIP: Use to understand how something works or to see full implementations`);
       break;
@@ -334,8 +331,8 @@ DESCRIPTION:
 
 EXAMPLES:
   hierarchy "Scene"            # Show hierarchy for Scene class
-  hierarchy "View"             # Show all View subclasses and base classes
-  hierarchy "ResourceManager"  # Show ResourceManager inheritance tree
+  hierarchy "GameObject"       # Show all GameObject subclasses and base classes
+  hierarchy "Character"        # Show Character inheritance tree
 
 OUTPUT FORMAT:
   Shows inheritance relationships with tree characters:
@@ -362,9 +359,9 @@ DESCRIPTION:
   - Shows all overloads if multiple exist
 
 EXAMPLES:
-  signature "View::SetSize"      # Show View::SetSize signature and other matches
-  signature "SetSize"            # Show SetSize method signatures
-  signature "CreateViewWithText" # Show CreateViewWithText function signatures
+  signature "GameObject::Update" # Show GameObject::Update signature
+  signature "Update"             # Show Update method signatures
+  signature "CreateGameObject"   # Show CreateGameObject function signatures
 
 OUTPUT FORMAT:
   Each signature shows:
@@ -397,8 +394,8 @@ DESCRIPTION:
   - Public type aliases (using/typedef)
 
 EXAMPLES:
-  interface "ResourceManager"  # Show public API of ResourceManager
-  interface "View"             # Show public interface of View class
+  interface "Engine"           # Show public API of Engine
+  interface "GameObject"       # Show public interface of GameObject class
   interface "SceneManager"     # Show what SceneManager exposes
 
 OUTPUT FORMAT:
@@ -414,26 +411,27 @@ OUTPUT FORMAT:
 TIP: Use to quickly understand what a class offers without reading implementation`);
       break;
 
-    case "context":
-      console.log(`Show contextual code around a symbol
+    case "show":
+      console.log(`Show complete source code and context
 
 USAGE:
-  clangd-query context <symbol>
+  clangd-query show <symbol>
 
 DESCRIPTION:
-  Display contextual code around a symbol, intelligently handling C++
+  Display complete source code of a symbol, intelligently handling C++
   declaration/definition split. For functions and methods, shows BOTH:
   - Declaration from header file (with doc comments and signature)
   - Definition from source file (with implementation details)
 
+  For classes, shows the complete class definition with all members.
   The command automatically extracts the right amount of context to understand
   the symbol, including preceding comments and complete function bodies.
 
 EXAMPLES:
-  context "Scene::LoadResources"    # Shows declaration in .h and definition in .cpp
-  context "ResourceManager"         # Shows class definition with context
-  context "CreateView"              # Shows function declaration and implementation
-  context "View::SetSize"           # Shows both declaration and definition
+  show GameObject::Update      # Shows declaration in .h and definition in .cpp
+  show GameObject              # Shows complete class definition
+  show CreateGameObject        # Shows function declaration and implementation
+  show Character::Update       # Shows both declaration and definition
 
 OUTPUT FORMAT:
   - Shows file location for each section
@@ -442,12 +440,12 @@ OUTPUT FORMAT:
   - Formats code in syntax-highlighted blocks
 
 WHY USE THIS:
-  - Perfect for understanding how a function works without viewing entire files
-  - Shows exactly what you need: signature + implementation
+  - Perfect for understanding how something works
+  - Shows exactly what you need: complete implementation
   - Eliminates jumping between header and source files
   - Great for code reviews and understanding unfamiliar code
 
-TIP: Use when you need to understand what a function does, not just its signature`);
+TIP: Use when you need to understand what something does and how it's implemented`);
       break;
 
     case "logs":
@@ -765,9 +763,9 @@ async function executeCommand(
       console.log(result.text);
       break;
 
-    case "context":
-      result = await sendRequest(projectRoot, "getContext", {
-        symbol: processSymbolQuery(args[0], "context"),
+    case "show":
+      result = await sendRequest(projectRoot, "getShow", {
+        symbol: processSymbolQuery(args[0], "show"),
       }, options.timeout ? options.timeout * 1000 : undefined, options.debug);
       console.log(result.text);
       break;
@@ -884,6 +882,7 @@ async function main(): Promise<void> {
     const commandExpectations: Record<string, { argCount: number, argName?: string }> = {
       search: { argCount: 1, argName: "query" },
       view: { argCount: 1, argName: "symbol" },
+      show: { argCount: 1, argName: "symbol" },
       usages: { argCount: 1, argName: "symbol or location" },
       hierarchy: { argCount: 1, argName: "class name" },
       signature: { argCount: 1, argName: "function/method name" },
