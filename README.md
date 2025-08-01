@@ -1,6 +1,8 @@
-# Clangd Query Tool
+# clangd-query
 
 Fast C++ code intelligence CLI tool that provides instant access to semantic code navigation features through a persistent daemon architecture.
+
+`clangd-query` leverages the clangd language server to provide IDE-quality code intelligence on the command line. Perfect for exploring large C++ codebases, integrating with scripts, or building development tools.
 
 ## Features
 
@@ -16,14 +18,25 @@ Fast C++ code intelligence CLI tool that provides instant access to semantic cod
 
 ## Installation
 
-1. Make sure you have Node.js v18+ installed
-2. Install dependencies:
+### From npm (coming soon)
+```bash
+npm install -g clangd-query
+```
+
+### From source
+1. Clone this repository
+2. Make sure you have Node.js v18+ installed
+3. Install dependencies:
    ```bash
    npm install
    ```
-3. Build the TypeScript code:
+4. Build the TypeScript code:
    ```bash
    npm run build
+   ```
+5. Link the command globally:
+   ```bash
+   npm link
    ```
 
 ## Prerequisites
@@ -245,3 +258,23 @@ The tool will build a `compile_commands.json` from the `CMakeLists.txt`, which m
 
 - **Compilation Database**: Cached in `.cache/clangd-query/build/compile_commands.json`
 - **Index Location**: `.cache/clangd-query/build/.cache/clangd/index/`
+- **Socket Location**: System temp directory
+- **Log Files**: System temp directory
+
+## Requirements
+
+- Node.js 18 or higher
+- clangd 12 or higher (15+ recommended for full feature support)
+- CMake-based C++ project (for automatic compile_commands.json generation)
+
+## License
+
+MIT License - see [LICENSE](LICENSE) file for details.
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit issues and pull requests.
+
+## Acknowledgments
+
+Built on top of the excellent [clangd](https://clangd.llvm.org/) language server.
