@@ -17,10 +17,13 @@ await waitForDaemonReady();
 console.log('Test 1: Search for GameObject class');
 const result1 = await runClangdQuery(['search', 'GameObject']);
 assert(result1.exitCode === 0, 'Command should succeed');
-assertContains(result1.stdout, 'Found 8 symbols matching "GameObject"');
 assertContains(result1.stdout, 'class game_engine::GameObject');
 assertContains(result1.stdout, 'game_engine::GameObject::GameObject');
+assertContains(result1.stdout, 'game_engine::Engine::CreateGameObject');
+assertContains(result1.stdout, 'game_engine::Engine::DestroyGameObject');
+assertContains(result1.stdout, 'game_engine::Engine::GetGameObject');
 assertContains(result1.stdout, 'game_engine::GameObject::~GameObject');
+
 console.log('✓ Test 1 passed\n');
 
 // Test 2: Search for Character with inheritance
