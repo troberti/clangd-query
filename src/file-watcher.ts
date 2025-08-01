@@ -152,15 +152,15 @@ export class FileWatcher {
     });
 
     // Set up event handlers
-    this.watcher
-      .on("add", (filePath) => this.onFileChange(filePath, FileChangeType.Created))
-      .on("change", (filePath) => this.onFileChange(filePath, FileChangeType.Changed))
-      .on("unlink", (filePath) => this.onFileChange(filePath, FileChangeType.Deleted))
-      .on("error", (error) => this.logger?.error("File watcher error", error));
+    (this.watcher as any)
+      .on("add", (filePath: string) => this.onFileChange(filePath, FileChangeType.Created))
+      .on("change", (filePath: string) => this.onFileChange(filePath, FileChangeType.Changed))
+      .on("unlink", (filePath: string) => this.onFileChange(filePath, FileChangeType.Deleted))
+      .on("error", (error: Error) => this.logger?.error("File watcher error", error));
 
     // Wait for initial scan to complete
     await new Promise<void>((resolve) => {
-      this.watcher!.on("ready", () => {
+      (this.watcher as any).on("ready", () => {
         this.logger?.info("File watcher ready");
         resolve();
       });

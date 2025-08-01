@@ -12,17 +12,22 @@
     "clangd-query": "./dist/client.js",
     "clangd-daemon": "./dist/daemon.js"
   },
-  "keywords": ["clangd", "lsp", "cpp", "code-intelligence"],
+  "keywords": [
+    "clangd",
+    "lsp",
+    "cpp",
+    "code-intelligence"
+  ],
   "author": "Firi Games",
   "license": "MIT",
   "dependencies": {
-    "vscode-jsonrpc": "^8.2.0",
-    "vscode-languageserver-protocol": "^3.17.5",
-    "execa": "^8.0.1",
-    "chokidar": "^4.0.3"
+    "chokidar": "4.0.3",
+    "execa": "8.0.1",
+    "vscode-jsonrpc": "8.2.0",
+    "vscode-languageserver-protocol": "3.17.5"
   },
   "devDependencies": {
-    "typescript": "^5.3.3",
-    "@types/node": "^20.10.5"
+    "@types/node": "20.10.5",
+    "typescript": "5.8.3"
   }
 }
