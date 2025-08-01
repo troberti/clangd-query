@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "daemon": "node dist/daemon.js"
+    "daemon": "node dist/daemon.js",
+    "test": "node test/commands/search.test.js && node test/commands/view.test.js && node test/commands/hierarchy.test.js && node test/commands/usages.test.js && node test/commands/signature.test.js && node test/commands/interface.test.js && node test/commands/context.test.js"
   },
   "bin": {
     "clangd-query": "./dist/client.js",
