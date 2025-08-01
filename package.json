@@ -1,7 +1,7 @@
 {
   "name": "clangd-query",
-  "version": "1.0.0",
-  "description": "Fast C++ code intelligence CLI tool with semantic search and navigation",
+  "version": "1.0.1",
+  "description": "Fast C++ code intelligence CLI tool for humans and AI agents. Provides semantic search, source code reading and usage lookups.",
   "main": "dist/client.js",
   "type": "module",
   "scripts": {
@@ -23,12 +23,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/firi/clangd-query.git"
+    "url": "git+https://github.com/troberti/clangd-query.git"
   },
   "bugs": {
-    "url": "https://github.com/firi/clangd-query/issues"
+    "url": "https://github.com/troberti/clangd-query/issues"
   },
-  "homepage": "https://github.com/firi/clangd-query#readme",
+  "homepage": "https://github.com/troberti/clangd-query#readme",
   "engines": {
     "node": ">=18.0.0"
   },
