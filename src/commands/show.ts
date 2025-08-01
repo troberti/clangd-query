@@ -183,6 +183,9 @@ export async function getShowAsText(
     const startLine = loc.location.range.start.line;
     
     // Get folding ranges for this file to better understand code structure
+    // IMPORTANT: We use folding ranges to get accurate semantic boundaries of code structures.
+    // This is much more reliable than any manual text parsing (looking for braces, semicolons, etc).
+    // NEVER attempt to manually parse C++ syntax - always rely on clangd's semantic understanding.
     await client.ensureDocumentOpen(loc.path);
     const foldingRanges = await client.getFoldingRanges(loc.path, logger);
     
@@ -233,35 +236,13 @@ export async function getShowAsText(
           // Add 1 to ensure we include it
           contextEnd = Math.min(functionRange.endLine + 1, lines.length - 1);
         } else {
-          // Fallback: manual brace counting
-          let braceCount = 0;
-          let foundOpeningBrace = false;
-          
-          for (let j = startLine; j < lines.length && j < startLine + 100; j++) {
-            const line = lines[j];
-            for (const char of line) {
-              if (char === '{') {
-                braceCount++;
-                foundOpeningBrace = true;
-              } else if (char === '}') {
-                braceCount--;
-              }
-            }
-            
-            contextEnd = j;
-            
-            if (foundOpeningBrace && braceCount === 0) {
-              break;
-            }
-          }
+          // If no folding range found, show a reasonable amount
+          contextEnd = Math.min(startLine + 50, lines.length - 1);
         }
       } else {
-        // This is a declaration (no body), show declaration + a bit of context
+        // This is a declaration (no body), show just the declaration
         contextStart = commentStart;
         contextEnd = loc.location.range.end.line;
-        
-        // Include a couple lines after to show the next method/member for context
-        contextEnd = Math.min(contextEnd + 2, lines.length - 1);
       }
     }
     
@@ -283,19 +264,17 @@ export async function getShowAsText(
       }
       
       if (classRange) {
-        // For classes, show up to 30 lines to give a good overview
-        contextEnd = Math.min(classRange.endLine, startLine + 30);
+        // For classes, show the complete implementation
+        contextEnd = classRange.endLine;
       } else {
-        // Fallback: show 20 lines for class/struct/enum definitions
-        contextEnd = Math.min(startLine + 20, lines.length - 1);
+        // If no folding range found, show a reasonable amount
+        contextEnd = Math.min(startLine + 100, lines.length - 1);
       }
     }
     // For other symbol types (variables, typedefs, etc)
     else {
       contextStart = commentStart;
       contextEnd = loc.location.range.end.line;
-      // Show a few more lines for context
-      contextEnd = Math.min(contextEnd + 5, lines.length - 1);
     }
     
     // Extract the context lines

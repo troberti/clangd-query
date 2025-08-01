@@ -46,11 +46,27 @@ assertContains(result3.stdout, 'GameObject::GetComponent() const {');
 assertContains(result3.stdout, 'std::dynamic_pointer_cast<T>');
 console.log('✓ Test 3 passed\n');
 
-// Test 4: Show non-existent symbol
-console.log('Test 4: Show non-existent symbol');
-const result4 = await runClangdQuery(['show', 'NonExistentMethod']);
-assert(result4.exitCode === 0, 'Command should succeed even with no results');
-assertContains(result4.stdout, 'No symbols found matching "NonExistentMethod"');
+// Test 4: Show complete class implementation
+console.log('Test 4: Show Engine class (complete implementation)');
+const result4 = await runClangdQuery(['show', 'Engine']);
+assert(result4.exitCode === 0, 'Command should succeed');
+// Should show the complete class
+assertContains(result4.stdout, 'class Engine {');
+assertContains(result4.stdout, 'static Engine& GetInstance();');
+assertContains(result4.stdout, 'bool Initialize(');
+assertContains(result4.stdout, 'void Shutdown();');
+assertContains(result4.stdout, 'private:');
+assertContains(result4.stdout, 'std::unique_ptr<RenderSystem> render_system_;');
+assertContains(result4.stdout, 'static constexpr float kFixedTimeStep');
+// Verify it shows the closing brace
+assertContains(result4.stdout, '};');
 console.log('✓ Test 4 passed\n');
+
+// Test 5: Show non-existent symbol
+console.log('Test 5: Show non-existent symbol');
+const result5 = await runClangdQuery(['show', 'NonExistentMethod']);
+assert(result5.exitCode === 0, 'Command should succeed even with no results');
+assertContains(result5.stdout, 'No symbols found matching "NonExistentMethod"');
+console.log('✓ Test 5 passed\n');
 
 console.log('All show tests passed! ✓');
