@@ -1,0 +1,28 @@
+{
+  "name": "clangd-query",
+  "version": "1.0.0",
+  "description": "Fast C++ code intelligence CLI tool with semantic search and navigation",
+  "main": "dist/client.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "daemon": "node dist/daemon.js"
+  },
+  "bin": {
+    "clangd-query": "./dist/client.js",
+    "clangd-daemon": "./dist/daemon.js"
+  },
+  "keywords": ["clangd", "lsp", "cpp", "code-intelligence"],
+  "author": "Firi Games",
+  "license": "MIT",
+  "dependencies": {
+    "vscode-jsonrpc": "^8.2.0",
+    "vscode-languageserver-protocol": "^3.17.5",
+    "execa": "^8.0.1",
+    "chokidar": "^4.0.3"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3",
+    "@types/node": "^20.10.5"
+  }
+}

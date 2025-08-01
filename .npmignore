@@ -1,0 +1,5 @@
+src/
+tsconfig.json
+build_and_run_cli.sh
+.gitignore
+.git/
