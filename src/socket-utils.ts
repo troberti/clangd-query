@@ -165,8 +165,8 @@ export function cleanupStaleLockFile(lockFilePath: string): boolean {
  * @returns Path to the log file
  */
 export function getLogFilePath(projectRoot: string): string {
-  const hash = crypto.createHash("md5").update(projectRoot).digest("hex");
-  return path.join(os.tmpdir(), `clangd-daemon-${hash}.log`);
+  // Use .cache/clangd-query directory in the project root for logs
+  return path.join(projectRoot, ".cache", "clangd-query", "daemon.log");
 }
 
 /**
