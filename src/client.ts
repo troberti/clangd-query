@@ -235,7 +235,7 @@ COMMANDS:
 OPTIONS:
   --verbose, -v               Show detailed request/response logs
   --limit <n>                 Limit number of results (default: 20)
-  --timeout <seconds>         Request timeout (default: 30)
+  --timeout <seconds>         Request timeout (default: 60)
 
 Note: Options can appear anywhere on the command line.
 
@@ -558,7 +558,7 @@ async function startDaemon(projectRoot: string): Promise<void> {
 
   // Wait for daemon to be ready (check lock file and socket)
   const lockFilePath = generateLockFilePath(projectRoot);
-  const maxWaitTime = 10000; // 10 seconds
+  const maxWaitTime = 120000; // 120 seconds for initial indexing
   const startTime = Date.now();
 
   while (Date.now() - startTime < maxWaitTime) {
@@ -580,7 +580,7 @@ async function sendRequest(
   projectRoot: string,
   method: string,
   params: any,
-  timeout: number = 30000,
+  timeout: number = 60000,
   debug: boolean = false
 ): Promise<any> {
   const socketPath = generateSocketPath(projectRoot);
