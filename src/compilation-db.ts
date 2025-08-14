@@ -1,6 +1,7 @@
 import { execa } from 'execa';
 import * as path from 'path';
 import * as fs from 'fs/promises';
+import { Logger } from './logger.js';
 
 /**
  * Ensures a compile_commands.json exists in the .cache/clangd-query directory.
@@ -17,11 +18,12 @@ import * as fs from 'fs/promises';
  * navigation, and symbol indexing.
  *
  * @param projectRoot - The absolute path to the C++ project root directory
+ * @param logger - Logger instance for logging progress and errors
  * @returns The path to the directory containing compile_commands.json
  * @throws Error if no CMakeLists.txt is found or if CMake fails to generate
  *         the compilation database
  */
-export async function ensureCompileCommands(projectRoot: string): Promise<string> {
+export async function ensureCompileCommands(projectRoot: string, logger: Logger): Promise<string> {
     // Our dedicated directory for clangd-query within the .cache directory
     const cacheDir = path.join(projectRoot, '.cache');
     const queryDir = path.join(cacheDir, 'clangd-query');
@@ -31,7 +33,7 @@ export async function ensureCompileCommands(projectRoot: string): Promise<string
     // Check if we already have compile_commands.json in our clangd-query directory
     try {
         await fs.access(queryCompileCommandsPath);
-        console.log('Found existing compile_commands.json in .cache/clangd-query/build.');
+        logger.info('Found existing compile_commands.json in .cache/clangd-query/build.');
         return queryBuildDir; // Return the directory containing compile_commands.json
     } catch {
         // It doesn't exist in our directory, we need to generate it
@@ -48,14 +50,14 @@ export async function ensureCompileCommands(projectRoot: string): Promise<string
         );
     }
 
-    console.log('compile_commands.json not found. Attempting to generate from CMakeLists.txt...');
+    logger.info('compile_commands.json not found. Generating from CMakeLists.txt...');
 
     try {
         // Ensure the build directory exists
         await fs.mkdir(queryBuildDir, { recursive: true });
 
         // Run CMake to generate compile_commands.json in our directory
-        console.log(`Running cmake in ${queryBuildDir}...`);
+        logger.info(`Running CMake to generate compile_commands.json (this may take 30-60 seconds for large projects)...`);
         const result = await execa('cmake', [
             '-S', projectRoot,     // Source directory
             '-B', queryBuildDir,     // Build directory (our .clangd-query/build)
@@ -69,7 +71,7 @@ export async function ensureCompileCommands(projectRoot: string): Promise<string
         // Verify the file was created
         await fs.access(queryCompileCommandsPath);
 
-        console.log('Successfully generated compile_commands.json.');
+        logger.info('Successfully generated compile_commands.json');
         return queryBuildDir; // Return the directory containing compile_commands.json
 
     } catch (error: any) {

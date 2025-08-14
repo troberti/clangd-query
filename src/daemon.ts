@@ -221,8 +221,11 @@ class DaemonLogger implements Logger {
 
     // Only write to file if the message level is at or below the configured level
     if (level <= this.level) {
-      // Write to log file with full timestamp
-      const fullTimestamp = now.toISOString();
+      // Format as "Aug 14 15:13:12.080" using locale string
+      const dateStr = now.toLocaleDateString('en-US', { month: 'short', day: '2-digit' });
+      const timeStr = now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      const ms = now.getMilliseconds().toString().padStart(3, '0');
+      const fullTimestamp = `${dateStr} ${timeStr}.${ms}`;
       let fileLogMessage = `[${fullTimestamp}] [${levelName}] ${message}`;
       if (args.length > 0) {
         const formattedArgs = args.map(arg =>
@@ -232,6 +235,9 @@ class DaemonLogger implements Logger {
       }
 
       this.logStream.write(fileLogMessage + "\n");
+      // Force flush to ensure logs are immediately visible on disk
+      this.logStream.cork();
+      this.logStream.uncork();
     }
   }
 

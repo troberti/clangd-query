@@ -198,7 +198,8 @@ export class ClangdClient {
     // Ensure compile_commands.json exists in .clangd-query/build
     let compileCommandsDir: string;
     try {
-      compileCommandsDir = await ensureCompileCommands(this.projectRoot);
+      this.logger.info("Checking for compile_commands.json...");
+      compileCommandsDir = await ensureCompileCommands(this.projectRoot, this.logger);
       this.logger.info(
         `Using compile_commands.json from: ${compileCommandsDir}`,
       );
