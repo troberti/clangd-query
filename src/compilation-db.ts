@@ -37,7 +37,7 @@ export async function ensureCompileCommands(projectRoot: string, logger: Logger)
         return queryBuildDir; // Return the directory containing compile_commands.json
     } catch {
         // It doesn't exist in our directory, we need to generate it
-        console.log('compile_commands.json not found in .cache/clangd-query/build.');
+        logger.info('compile_commands.json not found in .cache/clangd-query/build.');
     }
 
     // Check if CMakeLists.txt exists in project root
