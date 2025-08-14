@@ -143,6 +143,17 @@ class DaemonLogger implements Logger {
     const logDir = path.dirname(this.logFilePath);
     fs.mkdirSync(logDir, { recursive: true });
 
+    // Delete log file if it's too large (> 1MB)
+    const maxLogSize = 1024 * 1024; // 1MB
+    try {
+      const stats = fs.statSync(this.logFilePath);
+      if (stats.size > maxLogSize) {
+        fs.unlinkSync(this.logFilePath);
+      }
+    } catch {
+      // File doesn't exist yet, that's fine
+    }
+
     // Create log stream with append mode
     this.logStream = fs.createWriteStream(this.logFilePath, {
       flags: "a",
