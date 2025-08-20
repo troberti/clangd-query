@@ -3,10 +3,8 @@ package commands
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 
 	"clangd-query/internal/logger"
@@ -31,7 +29,7 @@ func Show(client *lsp.ClangdClient, query string, log logger.Logger) (string, er
 	// Use the best match - symbols are already sorted by relevance from clangd
 	symbol := symbols[0]
 
-	symbolKindName := symbolKindToString(symbol.Kind)
+	symbolKindName := SymbolKindToString(symbol.Kind)
 	fullName := formatSymbolForDisplay(symbol)
 
 	// Get the symbol's location
@@ -309,66 +307,6 @@ func hasBody(filePath string, startLine int) (bool, error) {
 	return false, nil
 }
 
-// symbolKindToString converts SymbolKind enum to human-readable string
-func symbolKindToString(kind lsp.SymbolKind) string {
-	switch kind {
-	case lsp.SymbolKindFile:
-		return "file"
-	case lsp.SymbolKindModule:
-		return "module"
-	case lsp.SymbolKindNamespace:
-		return "namespace"
-	case lsp.SymbolKindPackage:
-		return "package"
-	case lsp.SymbolKindClass:
-		return "class"
-	case lsp.SymbolKindMethod:
-		return "method"
-	case lsp.SymbolKindProperty:
-		return "property"
-	case lsp.SymbolKindField:
-		return "field"
-	case lsp.SymbolKindConstructor:
-		return "constructor"
-	case lsp.SymbolKindEnum:
-		return "enum"
-	case lsp.SymbolKindInterface:
-		return "interface"
-	case lsp.SymbolKindFunction:
-		return "function"
-	case lsp.SymbolKindVariable:
-		return "variable"
-	case lsp.SymbolKindConstant:
-		return "constant"
-	case lsp.SymbolKindString:
-		return "string"
-	case lsp.SymbolKindNumber:
-		return "number"
-	case lsp.SymbolKindBoolean:
-		return "boolean"
-	case lsp.SymbolKindArray:
-		return "array"
-	case lsp.SymbolKindObject:
-		return "object"
-	case lsp.SymbolKindKey:
-		return "key"
-	case lsp.SymbolKindNull:
-		return "null"
-	case lsp.SymbolKindEnumMember:
-		return "enum member"
-	case lsp.SymbolKindStruct:
-		return "struct"
-	case lsp.SymbolKindEvent:
-		return "event"
-	case lsp.SymbolKindOperator:
-		return "operator"
-	case lsp.SymbolKindTypeParameter:
-		return "type parameter"
-	default:
-		return "symbol"
-	}
-}
-
 
 // min returns the minimum of two integers
 func min(a, b int) int {
@@ -386,49 +324,3 @@ func max(a, b int) int {
 	return b
 }
 
-// parseLocationOrSymbol parses input as either file:line:column or symbol name
-func parseLocationOrSymbol(client *lsp.ClangdClient, input string) (string, lsp.Position, error) {
-	// Try to parse as file:line:column
-	parts := strings.Split(input, ":")
-	if len(parts) >= 3 {
-		// Might be a location
-		file := parts[0]
-		
-		// Handle absolute paths that contain ':'
-		if len(parts) > 3 {
-			file = strings.Join(parts[:len(parts)-2], ":")
-		}
-		
-		line, err1 := strconv.Atoi(parts[len(parts)-2])
-		col, err2 := strconv.Atoi(parts[len(parts)-1])
-		
-		if err1 == nil && err2 == nil {
-			// It's a location
-			if !filepath.IsAbs(file) {
-				file = filepath.Join(client.ProjectRoot, file)
-			}
-			
-			uri := "file://" + file
-			position := lsp.Position{
-				Line:      line - 1, // Convert to 0-based
-				Character: col - 1,
-			}
-			return uri, position, nil
-		}
-	}
-	
-	// Not a location, treat as symbol name
-	// Search for the symbol
-	symbols, err := client.WorkspaceSymbol(input)
-	if err != nil {
-		return "", lsp.Position{}, err
-	}
-	
-	if len(symbols) == 0 {
-		return "", lsp.Position{}, fmt.Errorf("symbol not found: %s", input)
-	}
-	
-	// Use the first match
-	symbol := symbols[0]
-	return symbol.Location.URI, symbol.Location.Range.Start, nil
-}

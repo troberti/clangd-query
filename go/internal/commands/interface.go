@@ -10,15 +10,34 @@ import (
 
 // Interface extracts the public interface of a class/struct
 func Interface(client *lsp.ClangdClient, input string, log logger.Logger) (string, error) {
-	// Parse input  
-	uri, position, err := parseLocationOrSymbol(client, input)
+	// Search for the symbol
+	symbols, err := client.WorkspaceSymbol(input)
 	if err != nil {
-		log.Error("Failed to parse input: %v", err)
-		return "", err
+		log.Error("Failed to search for symbol: %v", err)
+		return "", fmt.Errorf("failed to search for symbol: %v", err)
 	}
 
+	if len(symbols) == 0 {
+		// Provide a helpful message when symbol is not found
+		log.Info("No symbols found matching: %s", input)
+		return fmt.Sprintf("No class or struct found matching '%s'\n\nTip: Make sure the symbol name is spelled correctly.", input), nil
+	}
+
+	// Use the best match - symbols are already sorted by relevance from clangd
+	symbol := symbols[0]
+
+	// Check if it's a class or struct
+	if symbol.Kind != lsp.SymbolKindClass && symbol.Kind != lsp.SymbolKindStruct {
+		log.Info("Symbol '%s' is not a class or struct (it's a %s)", input, SymbolKindToString(symbol.Kind))
+		return fmt.Sprintf("'%s' is not a class or struct (it's a %s)\n\nThe interface command only works with classes and structs.",
+			formatSymbolForDisplay(symbol), SymbolKindToString(symbol.Kind)), nil
+	}
+
+	uri := symbol.Location.URI
+	position := symbol.Location.Range.Start
+
 	// Get document symbols
-	symbols, err := client.GetDocumentSymbols(uri)
+	docSymbols, err := client.GetDocumentSymbols(uri)
 	if err != nil {
 		log.Error("Failed to get document symbols: %v", err)
 		return "", err
@@ -27,7 +46,7 @@ func Interface(client *lsp.ClangdClient, input string, log logger.Logger) (strin
 	// Find the class/struct at the position
 	var targetSymbol *lsp.DocumentSymbol
 	var findSymbol func([]lsp.DocumentSymbol)
-	
+
 	findSymbol = func(syms []lsp.DocumentSymbol) {
 		for i := range syms {
 			s := &syms[i]
@@ -44,9 +63,9 @@ func Interface(client *lsp.ClangdClient, input string, log logger.Logger) (strin
 			}
 		}
 	}
-	
-	findSymbol(symbols)
-	
+
+	findSymbol(docSymbols)
+
 	if targetSymbol == nil {
 		log.Error("No class or struct found at position")
 		return "", fmt.Errorf("no class or struct found at position")
@@ -54,7 +73,7 @@ func Interface(client *lsp.ClangdClient, input string, log logger.Logger) (strin
 
 	// Build formatted output
 	var output strings.Builder
-	
+
 	// Format class name with location - use selection range start for more precise location
 	location := formatLocation(client, lsp.Location{
 		URI:   uri,
@@ -63,7 +82,7 @@ func Interface(client *lsp.ClangdClient, input string, log logger.Logger) (strin
 			End:   targetSymbol.SelectionRange.Start,
 		},
 	})
-	
+
 	// Include container name if present to get full qualified name
 	fullName := targetSymbol.Name
 	if targetSymbol.Detail != "" && strings.Contains(targetSymbol.Detail, "::") {
@@ -75,7 +94,7 @@ func Interface(client *lsp.ClangdClient, input string, log logger.Logger) (strin
 			}
 		}
 	}
-	
+
 	// Try to get full name from workspace symbol search for better accuracy
 	wsSymbols, _ := client.WorkspaceSymbol(targetSymbol.Name)
 	for _, sym := range wsSymbols {
@@ -84,32 +103,32 @@ func Interface(client *lsp.ClangdClient, input string, log logger.Logger) (strin
 			break
 		}
 	}
-	
+
 	output.WriteString(fmt.Sprintf("class %s - %s\n\n", fullName, location))
 	output.WriteString("Public Interface:\n\n")
-	
+
 	publicMembersFound := false
-	
+
 	for _, child := range targetSymbol.Children {
 		// Get parsed documentation to determine access level and signature
 		doc, err := client.GetDocumentation(uri, child.SelectionRange.Start)
 		if err != nil || doc == nil {
 			continue
 		}
-		
+
 		// Only include public members
 		if doc.AccessLevel != "public" {
 			continue
 		}
-		
+
 		publicMembersFound = true
-		
+
 		signature := doc.Signature
 		if signature == "" {
 			// Fallback to symbol name and detail
 			signature = formatSymbolSignature(&child)
 		}
-		
+
 		// For template methods, we need special handling
 		// The signature might be just "template <typename T>" without the method signature
 		if strings.HasPrefix(signature, "template") && !strings.Contains(signature, "(") {
@@ -129,10 +148,10 @@ func Interface(client *lsp.ClangdClient, input string, log logger.Logger) (strin
 				}
 			}
 		}
-		
+
 		output.WriteString(signature)
 		output.WriteString("\n")
-		
+
 		if doc.Description != "" {
 			// Word wrap documentation with 2-space indent
 			wrappedLines := wordWrap(doc.Description, 78) // 78 to account for 2-space indent
@@ -146,7 +165,7 @@ func Interface(client *lsp.ClangdClient, input string, log logger.Logger) (strin
 		}
 		output.WriteString("\n")
 	}
-	
+
 	if !publicMembersFound {
 		output.WriteString("No public members found.")
 	}
@@ -159,7 +178,7 @@ func Interface(client *lsp.ClangdClient, input string, log logger.Logger) (strin
 // formatSymbolSignature formats a symbol as a signature string
 func formatSymbolSignature(symbol *lsp.DocumentSymbol) string {
 	signature := symbol.Name
-	
+
 	// Add detail if available
 	if symbol.Detail != "" {
 		// For methods, detail often contains the full signature
@@ -170,7 +189,7 @@ func formatSymbolSignature(symbol *lsp.DocumentSymbol) string {
 			signature = symbol.Detail + " " + symbol.Name
 		}
 	}
-	
+
 	// Add symbol kind prefix if not already present
 	kind := symbol.Kind.String()
 	if !strings.Contains(signature, kind) {
@@ -185,6 +204,6 @@ func formatSymbolSignature(symbol *lsp.DocumentSymbol) string {
 			signature = kind + " " + signature
 		}
 	}
-	
+
 	return signature
 }

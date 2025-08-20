@@ -145,3 +145,63 @@ func formatLocationSimple(client *lsp.ClangdClient, path string, line int) strin
 	}
 	return fmt.Sprintf("%s:%d", path, line+1)
 }
+
+// SymbolKindToString converts SymbolKind enum to human-readable string
+func SymbolKindToString(kind lsp.SymbolKind) string {
+	switch kind {
+	case lsp.SymbolKindFile:
+		return "file"
+	case lsp.SymbolKindModule:
+		return "module"
+	case lsp.SymbolKindNamespace:
+		return "namespace"
+	case lsp.SymbolKindPackage:
+		return "package"
+	case lsp.SymbolKindClass:
+		return "class"
+	case lsp.SymbolKindMethod:
+		return "method"
+	case lsp.SymbolKindProperty:
+		return "property"
+	case lsp.SymbolKindField:
+		return "field"
+	case lsp.SymbolKindConstructor:
+		return "constructor"
+	case lsp.SymbolKindEnum:
+		return "enum"
+	case lsp.SymbolKindInterface:
+		return "interface"
+	case lsp.SymbolKindFunction:
+		return "function"
+	case lsp.SymbolKindVariable:
+		return "variable"
+	case lsp.SymbolKindConstant:
+		return "constant"
+	case lsp.SymbolKindString:
+		return "string"
+	case lsp.SymbolKindNumber:
+		return "number"
+	case lsp.SymbolKindBoolean:
+		return "boolean"
+	case lsp.SymbolKindArray:
+		return "array"
+	case lsp.SymbolKindObject:
+		return "object"
+	case lsp.SymbolKindKey:
+		return "key"
+	case lsp.SymbolKindNull:
+		return "null"
+	case lsp.SymbolKindEnumMember:
+		return "enum member"
+	case lsp.SymbolKindStruct:
+		return "struct"
+	case lsp.SymbolKindEvent:
+		return "event"
+	case lsp.SymbolKindOperator:
+		return "operator"
+	case lsp.SymbolKindTypeParameter:
+		return "type parameter"
+	default:
+		return "symbol"
+	}
+}

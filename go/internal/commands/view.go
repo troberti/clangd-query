@@ -144,7 +144,7 @@ func View(client *lsp.ClangdClient, query string, log logger.Logger) (string, er
 			startLine = symbolLine  // Start from the declaration
 			endLine = foundRange.EndLine  // End at the closing brace
 			log.Debug("Using adjusted range for %s: %d-%d (symbol at %d, fold at %d-%d)", 
-				symbolKindToString(symbol.Kind), startLine, endLine, symbolLine, foundRange.StartLine, foundRange.EndLine)
+				SymbolKindToString(symbol.Kind), startLine, endLine, symbolLine, foundRange.StartLine, foundRange.EndLine)
 		} else {
 			startLine = foundRange.StartLine
 			endLine = foundRange.EndLine
@@ -214,7 +214,7 @@ func View(client *lsp.ClangdClient, query string, log logger.Logger) (string, er
 	}
 
 	// Build the symbol description
-	symbolKindName := symbolKindToString(symbol.Kind)
+	symbolKindName := SymbolKindToString(symbol.Kind)
 	fullName := formatSymbolForDisplay(symbol)
 
 	symbolDescription := fmt.Sprintf("%s '%s'", symbolKindName, fullName)
