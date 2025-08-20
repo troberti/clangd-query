@@ -9,17 +9,19 @@ import (
 )
 
 // Interface extracts the public interface of a class/struct
-func Interface(client *lsp.ClangdClient, input string, log logger.Logger) (*InterfaceResult, error) {
+func Interface(client *lsp.ClangdClient, input string, log logger.Logger) (string, error) {
 	// Parse input  
 	uri, position, err := parseLocationOrSymbol(client, input)
 	if err != nil {
-		return nil, err
+		log.Error("Failed to parse input: %v", err)
+		return "", err
 	}
 
 	// Get document symbols
 	symbols, err := client.GetDocumentSymbols(uri)
 	if err != nil {
-		return nil, err
+		log.Error("Failed to get document symbols: %v", err)
+		return "", err
 	}
 
 	// Find the class/struct at the position
@@ -46,11 +48,16 @@ func Interface(client *lsp.ClangdClient, input string, log logger.Logger) (*Inte
 	findSymbol(symbols)
 	
 	if targetSymbol == nil {
-		return nil, fmt.Errorf("no class or struct found at position")
+		log.Error("No class or struct found at position")
+		return "", fmt.Errorf("no class or struct found at position")
 	}
 
-	// Extract public members
-	members := make([]InterfaceMember, 0)
+	// Build formatted output
+	var output strings.Builder
+	
+	output.WriteString(fmt.Sprintf("Interface for %s:\n\n", targetSymbol.Name))
+	
+	publicMembersFound := false
 	
 	for _, child := range targetSymbol.Children {
 		// Get hover information to determine access level
@@ -66,6 +73,8 @@ func Interface(client *lsp.ClangdClient, input string, log logger.Logger) (*Inte
 			continue
 		}
 		
+		publicMembersFound = true
+		
 		// Parse hover content for signature
 		parsed := parseHoverContent(hover.Contents.Value)
 		
@@ -75,19 +84,29 @@ func Interface(client *lsp.ClangdClient, input string, log logger.Logger) (*Inte
 			signature = formatSymbolSignature(&child)
 		}
 		
-		member := InterfaceMember{
-			Signature:     signature,
-			Documentation: parsed.Documentation,
-			Access:        access,
-		}
+		output.WriteString("- ")
+		output.WriteString(signature)
+		output.WriteString("\n")
 		
-		members = append(members, member)
+		if parsed.Documentation != "" {
+			// Word wrap documentation
+			wrappedLines := wordWrap(parsed.Documentation, 80)
+			for _, line := range wrappedLines {
+				if strings.TrimSpace(line) != "" {
+					output.WriteString("  ")
+					output.WriteString(line)
+					output.WriteString("\n")
+				}
+			}
+		}
+		output.WriteString("\n")
+	}
+	
+	if !publicMembersFound {
+		output.WriteString("No public members found.")
 	}
 
-	return &InterfaceResult{
-		Name:    targetSymbol.Name,
-		Members: members,
-	}, nil
+	return output.String(), nil
 }
 
 // extractAccessLevel extracts the access level from hover information

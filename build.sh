@@ -1,5 +1,7 @@
 #!/bin/bash
 
+cd go
+
 # Set up Go environment
 export GOROOT=/usr/local/go
 export GOPATH=$HOME/go
@@ -49,12 +51,12 @@ case $COMMAND in
             exit 1
         fi
         ;;
-    
+
     test)
         print_status "Running tests..."
         go test ./...
         ;;
-    
+
     run)
         shift # Remove 'run' from arguments
         print_status "Building and running clangd-query..."
@@ -65,30 +67,30 @@ case $COMMAND in
             exit 1
         fi
         ;;
-    
+
     fmt)
         print_status "Formatting code..."
         go fmt ./...
         ;;
-    
+
     vet)
         print_status "Running go vet..."
         go vet ./...
         ;;
-    
+
     deps)
         print_status "Downloading dependencies..."
         go mod download
         go mod tidy
         ;;
-    
+
     clean)
         print_status "Cleaning build artifacts..."
         rm -f "$OUTPUT_DIR/$OUTPUT_NAME"
         go clean
         print_status "Clean complete"
         ;;
-    
+
     install)
         print_status "Installing clangd-query to /usr/local/bin..."
         if go build -o "$OUTPUT_DIR/$OUTPUT_NAME" .; then
@@ -105,7 +107,7 @@ case $COMMAND in
             exit 1
         fi
         ;;
-    
+
     help|--help|-h)
         echo "Usage: ./build.sh [command] [args...]"
         echo ""
@@ -125,7 +127,7 @@ case $COMMAND in
         echo "  ./build.sh run search Widget  # Build and search for 'Widget'"
         echo "  ./build.sh test              # Run tests"
         ;;
-    
+
     *)
         print_error "Unknown command: $COMMAND"
         echo "Run './build.sh help' for usage information"

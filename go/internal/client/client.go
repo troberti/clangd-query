@@ -6,11 +6,9 @@ import (
 	"net"
 	"os"
 	"os/exec"
-	"strings"
 	"syscall"
 	"time"
 
-	"clangd-query/internal/commands"
 	"clangd-query/internal/daemon"
 )
 
@@ -128,84 +126,108 @@ func (c *Client) CallTyped(method string, params map[string]interface{}, result 
 	return json.Unmarshal(raw, result)
 }
 
+// callCommand is a generic helper for commands that return formatted strings
+func (c *Client) callCommand(method string, params map[string]interface{}) (string, error) {
+	var result map[string]string
+	err := c.CallTyped(method, params, &result)
+	if err != nil {
+		return "", err
+	}
+	return result["output"], nil
+}
+
 // Search searches for symbols
-func (c *Client) Search(query string, limit int) ([]commands.SearchResult, error) {
-	params := map[string]interface{}{
+func (c *Client) Search(query string, limit int) (string, error) {
+	return c.callCommand("search", map[string]interface{}{
 		"query": query,  // Keep "query" for search since it's a search query, not a symbol
 		"limit": limit,
-	}
-
-	var results []commands.SearchResult
-	err := c.CallTyped("search", params, &results)
-	return results, err
+	})
 }
 
 // Show shows declaration and definition
-func (c *Client) Show(symbolOrLocation string) ([]commands.ShowResult, error) {
+func (c *Client) Show(symbolOrLocation string) (string, error) {
 	params := map[string]interface{}{
 		"symbol": symbolOrLocation,
 	}
 
-	var results []commands.ShowResult
-	err := c.CallTyped("show", params, &results)
-	return results, err
+	var result map[string]string
+	err := c.CallTyped("show", params, &result)
+	if err != nil {
+		return "", err
+	}
+	return result["output"], nil
 }
 
 // View views complete source code
-func (c *Client) View(symbolOrLocation string) (*commands.ViewResult, error) {
+func (c *Client) View(symbolOrLocation string) (string, error) {
 	params := map[string]interface{}{
 		"symbol": symbolOrLocation,
 	}
 
-	var result commands.ViewResult
+	var result map[string]string
 	err := c.CallTyped("view", params, &result)
-	return &result, err
+	if err != nil {
+		return "", err
+	}
+	return result["output"], nil
 }
 
 // Usages finds all usages of a symbol
-func (c *Client) Usages(symbolOrLocation string, limit int) ([]commands.UsageResult, error) {
+func (c *Client) Usages(symbolOrLocation string, limit int) (string, error) {
 	params := map[string]interface{}{
 		"symbol": symbolOrLocation,
 		"limit":  limit,
 	}
 
-	var results []commands.UsageResult
-	err := c.CallTyped("usages", params, &results)
-	return results, err
+	var result map[string]string
+	err := c.CallTyped("usages", params, &result)
+	if err != nil {
+		return "", err
+	}
+	return result["output"], nil
 }
 
 // Hierarchy shows type hierarchy
-func (c *Client) Hierarchy(symbolOrLocation string, limit int) (*commands.HierarchyResult, error) {
+func (c *Client) Hierarchy(symbolOrLocation string, limit int) (string, error) {
 	params := map[string]interface{}{
 		"symbol": symbolOrLocation,
 		"limit":  limit,
 	}
 
-	var result commands.HierarchyResult
+	var result map[string]string
 	err := c.CallTyped("hierarchy", params, &result)
-	return &result, err
+	if err != nil {
+		return "", err
+	}
+	return result["output"], nil
 }
 
 // Signature shows function signature
-func (c *Client) Signature(symbolOrLocation string) ([]commands.SignatureResult, error) {
+func (c *Client) Signature(symbolOrLocation string) (string, error) {
 	params := map[string]interface{}{
 		"symbol": symbolOrLocation,
 	}
 
-	var results []commands.SignatureResult
-	err := c.CallTyped("signature", params, &results)
-	return results, err
+	var result map[string]string
+	err := c.CallTyped("signature", params, &result)
+	if err != nil {
+		return "", err
+	}
+	return result["output"], nil
 }
 
 // Interface shows public interface
-func (c *Client) Interface(symbolOrLocation string) (*commands.InterfaceResult, error) {
+func (c *Client) Interface(symbolOrLocation string) (string, error) {
 	params := map[string]interface{}{
 		"symbol": symbolOrLocation,
 	}
 
-	var result commands.InterfaceResult
+	var result map[string]string
 	err := c.CallTyped("interface", params, &result)
-	return &result, err
+	if err != nil {
+		return "", err
+	}
+	return result["output"], nil
 }
 
 // GetLogs retrieves daemon logs
@@ -311,87 +333,53 @@ func Run(config *Config) error {
 	// Execute command
 	switch config.Command {
 	case "search":
-		results, err := client.Search(symbol, config.Limit)
+		output, err := client.Search(symbol, config.Limit)
 		if err != nil {
 			return err
 		}
-		for _, r := range results {
-			fmt.Printf("%s %s:%d:%d %s\n", 
-				r.Kind, r.File, r.Line, r.Column, r.Name)
-		}
+		fmt.Println(output)
 
 	case "show":
-		results, err := client.Show(symbol)
+		output, err := client.Show(symbol)
 		if err != nil {
 			return err
 		}
-		for i, r := range results {
-			if i > 0 {
-				fmt.Println("\n---")
-			}
-			fmt.Printf("%s:%d:%d:\n", r.File, r.Line, r.Column)
-			fmt.Print(r.Content)
-			if !strings.HasSuffix(r.Content, "\n") {
-				fmt.Println()
-			}
-		}
+		fmt.Println(output)
 
 	case "view":
-		result, err := client.View(symbol)
+		output, err := client.View(symbol)
 		if err != nil {
 			return err
 		}
-		fmt.Printf("%s:%d:%d:\n", result.File, result.Line, result.Column)
-		fmt.Print(result.Content)
-		if !strings.HasSuffix(result.Content, "\n") {
-			fmt.Println()
-		}
+		fmt.Println(output)
 
 	case "usages":
-		results, err := client.Usages(symbol, config.Limit)
+		output, err := client.Usages(symbol, config.Limit)
 		if err != nil {
 			return err
 		}
-		for _, r := range results {
-			fmt.Printf("%s:%d:%d: %s\n", 
-				r.File, r.Line, r.Column, r.Snippet)
-		}
+		fmt.Println(output)
 
 	case "hierarchy":
-		result, err := client.Hierarchy(symbol, config.Limit)
+		output, err := client.Hierarchy(symbol, config.Limit)
 		if err != nil {
 			return err
 		}
-		fmt.Print(result.Tree)
+		fmt.Println(output)
 
 	case "signature":
-		results, err := client.Signature(symbol)
+		output, err := client.Signature(symbol)
 		if err != nil {
 			return err
 		}
-		for i, r := range results {
-			if i > 0 {
-				fmt.Println()
-			}
-			fmt.Println(r.Signature)
-			if r.Documentation != "" {
-				fmt.Println(r.Documentation)
-			}
-		}
+		fmt.Println(output)
 
 	case "interface":
-		result, err := client.Interface(symbol)
+		output, err := client.Interface(symbol)
 		if err != nil {
 			return err
 		}
-		fmt.Printf("Public interface of %s:\n\n", result.Name)
-		for _, member := range result.Members {
-			fmt.Printf("%s\n", member.Signature)
-			if member.Documentation != "" {
-				fmt.Printf("  %s\n", member.Documentation)
-			}
-			fmt.Println()
-		}
+		fmt.Println(output)
 
 	case "logs":
 		// Parse log level from arguments

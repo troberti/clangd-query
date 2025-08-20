@@ -9,21 +9,23 @@ import (
 )
 
 // Hierarchy shows the type hierarchy of a class/struct
-func Hierarchy(client *lsp.ClangdClient, input string, limit int, log logger.Logger) (*HierarchyResult, error) {
+func Hierarchy(client *lsp.ClangdClient, input string, limit int, log logger.Logger) (string, error) {
 	// Parse input
 	uri, position, err := parseLocationOrSymbol(client, input)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
 	// Prepare type hierarchy
 	items, err := client.PrepareTypeHierarchy(uri, position)
 	if err != nil {
-		return nil, err
+		log.Error("Failed to prepare type hierarchy: %v", err)
+		return "", err
 	}
 
 	if len(items) == 0 {
-		return nil, fmt.Errorf("no type hierarchy found at position")
+		log.Error("No type hierarchy found at position")
+		return "", fmt.Errorf("no type hierarchy found at position")
 	}
 
 	item := items[0]
@@ -47,9 +49,7 @@ func Hierarchy(client *lsp.ClangdClient, input string, limit int, log logger.Log
 		printSubtypeTree(&tree, subtypes, "", true)
 	}
 
-	return &HierarchyResult{
-		Tree: tree.String(),
-	}, nil
+	return tree.String(), nil
 }
 
 // getSubtypesRecursive recursively gets all subtypes with cycle detection

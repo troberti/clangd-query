@@ -10,57 +10,61 @@ import (
 )
 
 // Signature shows function signatures with documentation
-func Signature(client *lsp.ClangdClient, input string, log logger.Logger) ([]SignatureResult, error) {
+func Signature(client *lsp.ClangdClient, input string, log logger.Logger) (string, error) {
 	// Parse input
 	uri, position, err := parseLocationOrSymbol(client, input)
 	if err != nil {
-		return nil, err
+		log.Error("Failed to parse input: %v", err)
+		return "", err
 	}
 
 	// Get hover information
 	hover, err := client.GetHover(uri, position)
 	if err != nil {
-		return nil, err
+		log.Error("Failed to get hover information: %v", err)
+		return "", err
 	}
 
 	if hover == nil || hover.Contents.Value == "" {
-		return nil, fmt.Errorf("no signature information found")
+		log.Error("No signature information found")
+		return "", fmt.Errorf("no signature information found")
 	}
 
 	// Parse hover content
 	parsed := parseHoverContent(hover.Contents.Value)
 	
-	results := make([]SignatureResult, 0)
+	var output strings.Builder
 	
 	// Extract signatures from declaration text
 	if parsed.DeclarationText != "" {
 		// Split by newlines for overloads
 		signatures := strings.Split(parsed.DeclarationText, "\n")
 		
-		for _, sig := range signatures {
+		for i, sig := range signatures {
 			sig = strings.TrimSpace(sig)
 			if sig == "" {
 				continue
 			}
 			
-			result := SignatureResult{
-				Signature:     sig,
-				Documentation: parsed.Documentation,
+			if i > 0 {
+				output.WriteString("\n\n")
 			}
-			results = append(results, result)
+			
+			output.WriteString("Signature: ")
+			output.WriteString(sig)
+			
+			if parsed.Documentation != "" {
+				output.WriteString("\n\nDocumentation:\n")
+				output.WriteString(parsed.Documentation)
+			}
 		}
-	}
-
-	if len(results) == 0 {
+	} else {
 		// Fallback: use the raw hover content
-		result := SignatureResult{
-			Signature:     hover.Contents.Value,
-			Documentation: "",
-		}
-		results = append(results, result)
+		output.WriteString("Signature: ")
+		output.WriteString(hover.Contents.Value)
 	}
 
-	return results, nil
+	return output.String(), nil
 }
 
 // HoverParsed represents parsed hover information
@@ -130,49 +134,10 @@ func parseHoverContent(content string) HoverParsed {
 	
 	// Word wrap documentation at 80 characters
 	if parsed.Documentation != "" {
-		parsed.Documentation = wordWrap(parsed.Documentation, 80)
+		lines := wordWrap(parsed.Documentation, 80)
+		parsed.Documentation = strings.Join(lines, "\n")
 	}
 	
 	return parsed
 }
 
-// wordWrap wraps text at the specified column
-func wordWrap(text string, width int) string {
-	if width <= 0 {
-		return text
-	}
-	
-	var result strings.Builder
-	lines := strings.Split(text, "\n")
-	
-	for _, line := range lines {
-		if len(line) <= width {
-			result.WriteString(line)
-			result.WriteString("\n")
-			continue
-		}
-		
-		// Wrap long lines
-		words := strings.Fields(line)
-		currentLine := ""
-		
-		for _, word := range words {
-			if currentLine == "" {
-				currentLine = word
-			} else if len(currentLine)+1+len(word) <= width {
-				currentLine += " " + word
-			} else {
-				result.WriteString(currentLine)
-				result.WriteString("\n")
-				currentLine = word
-			}
-		}
-		
-		if currentLine != "" {
-			result.WriteString(currentLine)
-			result.WriteString("\n")
-		}
-	}
-	
-	return strings.TrimSuffix(result.String(), "\n")
-}

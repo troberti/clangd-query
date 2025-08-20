@@ -12,8 +12,8 @@ NC='\033[0m' # No Color
 
 # Paths
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-BINARY="$SCRIPT_DIR/../bin/clangd-query"
-SAMPLE_PROJECT="$SCRIPT_DIR/../test/fixtures/sample-project"
+BINARY="$SCRIPT_DIR/bin/clangd-query"
+SAMPLE_PROJECT="$SCRIPT_DIR/test/fixtures/sample-project"
 
 # Check if binary exists
 if [ ! -f "$BINARY" ]; then
@@ -56,7 +56,7 @@ if [ $# -eq 0 ]; then
     echo -e "${GREEN}Running clangd-query Go implementation tests${NC}"
     echo "Binary: $BINARY"
     echo "Sample project: $SAMPLE_PROJECT"
-    
+
     # Basic commands
     run_test "Search for Widget" search Widget
     run_test "Search with limit" search Widget --limit 3
@@ -66,15 +66,15 @@ if [ $# -eq 0 ]; then
     run_test "Show hierarchy of Widget" hierarchy Widget
     run_test "Get signature of handleClick" signature handleClick
     run_test "Get interface of Widget" interface Widget
-    
+
     # Status commands
     run_test "Check daemon status" status
     run_test "Show daemon logs" logs
-    
+
     # Cleanup
     echo -e "\n${YELLOW}Shutting down daemon...${NC}"
     (cd "$SAMPLE_PROJECT" && "$BINARY" shutdown)
-    
+
 else
     # Run specific command passed as arguments
     echo -e "${GREEN}Running custom command${NC}"

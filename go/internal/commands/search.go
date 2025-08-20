@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 
@@ -8,53 +9,61 @@ import (
 	"clangd-query/internal/lsp"
 )
 
-// Search performs a workspace-wide symbol search
-func Search(client *lsp.ClangdClient, query string, limit int, log logger.Logger) ([]SearchResult, error) {
-	// Check for common regex patterns that users mistakenly use
-	if strings.Contains(query, " ") {
-		log.Info("Warning: Query contains spaces. clangd uses fuzzy matching, not regex.")
-		log.Info("Did you mean to search for multiple words? Try searching for each word separately.")
-	}
-
+// Search performs a workspace-wide symbol search and returns formatted text output.
+// The output format exactly matches the TypeScript implementation.
+func Search(client *lsp.ClangdClient, query string, limit int, log logger.Logger) (string, error) {
+	log.Info("Searching for symbols matching: %s (limit: %d)", query, limit)
+	
 	// Perform workspace symbol search
 	symbols, err := client.WorkspaceSymbol(query)
 	if err != nil {
-		return nil, err
+		return "", err
+	}
+	
+	log.Debug("Found %d symbols", len(symbols))
+
+	// Handle no results
+	if len(symbols) == 0 {
+		// Check if query has multiple words
+		if strings.Contains(query, " ") {
+			return formatMultiWordQueryHint(query, "search") +
+				"\nThen use interface command to see all its methods and members.", nil
+		}
+		return fmt.Sprintf(`No symbols found matching "%s"`, query), nil
 	}
 
-	// Convert to our result format
-	results := make([]SearchResult, 0, len(symbols))
+	// Build output
+	output := fmt.Sprintf(`Found %d symbols matching "%s":`+"\n\n", len(symbols), query)
+
+	count := 0
 	for _, symbol := range symbols {
-		// Extract file path from URI
-		file := strings.TrimPrefix(symbol.Location.URI, "file://")
-		// Make path relative if possible
-		if relPath, err := filepath.Rel(client.ProjectRoot, file); err == nil {
-			file = relPath
-		}
-
-		result := SearchResult{
-			Kind:   symbol.Kind.String(),
-			File:   file,
-			Line:   symbol.Location.Range.Start.Line + 1, // Convert to 1-based
-			Column: symbol.Location.Range.Start.Character + 1,
-			Name:   formatSymbolName(symbol),
-		}
-		results = append(results, result)
-
 		// Apply limit
-		if limit > 0 && len(results) >= limit {
+		if limit > 0 && count >= limit {
 			break
 		}
+
+		// Build the fully qualified name with type prefix
+		fullName := formatSymbolWithType(symbol)
+
+		// Get relative path
+		absolutePath := strings.TrimPrefix(symbol.Location.URI, "file://")
+		// Make path relative if possible
+		if relPath, err := filepath.Rel(client.ProjectRoot, absolutePath); err == nil {
+			absolutePath = relPath
+		}
+		
+		// Format location
+		line := symbol.Location.Range.Start.Line + 1      // Convert to 1-based
+		column := symbol.Location.Range.Start.Character + 1
+		formattedLocation := fmt.Sprintf("%s:%d:%d", absolutePath, line, column)
+
+		// Format with bullet point, backticks, and "at" prefix
+		output += fmt.Sprintf("- `%s` at %s\n", fullName, formattedLocation)
+		count++
 	}
 
-	return results, nil
+	// Remove trailing newline
+	return strings.TrimRight(output, "\n"), nil
 }
 
-// formatSymbolName formats a symbol name with its container
-func formatSymbolName(symbol lsp.WorkspaceSymbol) string {
-	if symbol.ContainerName != "" {
-		return symbol.ContainerName + "::" + symbol.Name
-	}
-	return symbol.Name
-}
 

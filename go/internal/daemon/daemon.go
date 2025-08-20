@@ -396,12 +396,13 @@ func (d *Daemon) forwardToClangd(req Request) (json.RawMessage, error) {
 			return nil, fmt.Errorf("search requires a query parameter")
 		}
 		
-		results, err := commands.Search(d.clangdClient, query, limit, d.logger)
+		result, err := commands.Search(d.clangdClient, query, limit, d.logger)
 		if err != nil {
 			d.logger.Error("search command failed: %v", err)
 			return nil, err
 		}
-		return json.Marshal(results)
+		// Return the formatted string wrapped in JSON
+		return json.Marshal(map[string]string{"output": result})
 		
 	case "show":
 		symbol, _ := params["symbol"].(string)
@@ -410,12 +411,12 @@ func (d *Daemon) forwardToClangd(req Request) (json.RawMessage, error) {
 			return nil, fmt.Errorf("show requires a symbol parameter")
 		}
 		
-		results, err := commands.Show(d.clangdClient, symbol, d.logger)
+		result, err := commands.Show(d.clangdClient, symbol, d.logger)
 		if err != nil {
 			d.logger.Error("show command failed: %v", err)
 			return nil, err
 		}
-		return json.Marshal(results)
+		return json.Marshal(map[string]string{"output": result})
 		
 	case "view":
 		symbol, _ := params["symbol"].(string)
@@ -429,7 +430,7 @@ func (d *Daemon) forwardToClangd(req Request) (json.RawMessage, error) {
 			d.logger.Error("view command failed: %v", err)
 			return nil, err
 		}
-		return json.Marshal(result)
+		return json.Marshal(map[string]string{"output": result})
 		
 	case "usages":
 		symbol, _ := params["symbol"].(string)
@@ -438,12 +439,12 @@ func (d *Daemon) forwardToClangd(req Request) (json.RawMessage, error) {
 			return nil, fmt.Errorf("usages requires a symbol parameter")
 		}
 		
-		results, err := commands.Usages(d.clangdClient, symbol, limit, d.logger)
+		result, err := commands.Usages(d.clangdClient, symbol, limit, d.logger)
 		if err != nil {
 			d.logger.Error("usages command failed: %v", err)
 			return nil, err
 		}
-		return json.Marshal(results)
+		return json.Marshal(map[string]string{"output": result})
 		
 	case "hierarchy":
 		symbol, _ := params["symbol"].(string)
@@ -457,7 +458,7 @@ func (d *Daemon) forwardToClangd(req Request) (json.RawMessage, error) {
 			d.logger.Error("hierarchy command failed: %v", err)
 			return nil, err
 		}
-		return json.Marshal(result)
+		return json.Marshal(map[string]string{"output": result})
 		
 	case "signature":
 		symbol, _ := params["symbol"].(string)
@@ -466,12 +467,12 @@ func (d *Daemon) forwardToClangd(req Request) (json.RawMessage, error) {
 			return nil, fmt.Errorf("signature requires a symbol parameter")
 		}
 		
-		results, err := commands.Signature(d.clangdClient, symbol, d.logger)
+		result, err := commands.Signature(d.clangdClient, symbol, d.logger)
 		if err != nil {
 			d.logger.Error("signature command failed: %v", err)
 			return nil, err
 		}
-		return json.Marshal(results)
+		return json.Marshal(map[string]string{"output": result})
 		
 	case "interface":
 		symbol, _ := params["symbol"].(string)
@@ -485,7 +486,7 @@ func (d *Daemon) forwardToClangd(req Request) (json.RawMessage, error) {
 			d.logger.Error("interface command failed: %v", err)
 			return nil, err
 		}
-		return json.Marshal(result)
+		return json.Marshal(map[string]string{"output": result})
 		
 	default:
 		d.logger.Error("unknown command: %s", req.Method)
