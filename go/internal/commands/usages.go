@@ -74,8 +74,7 @@ func findReferencesAtLocation(client *lsp.ClangdClient, file string, line, colum
 	
 	// Convert references to human-readable format
 	for _, ref := range references {
-		refPath := strings.TrimPrefix(ref.URI, "file://")
-		formattedLocation := formatLocation(client, refPath, ref.Range.Start.Line)
+		formattedLocation := formatLocation(client, ref)
 		output += fmt.Sprintf("- %s\n", formattedLocation)
 	}
 	
@@ -128,8 +127,7 @@ func findReferencesToSymbol(client *lsp.ClangdClient, symbolName string, log log
 	
 	// Convert references to human-readable format
 	for _, ref := range references {
-		refPath := strings.TrimPrefix(ref.URI, "file://")
-		formattedLocation := formatLocation(client, refPath, ref.Range.Start.Line)
+		formattedLocation := formatLocation(client, ref)
 		output += fmt.Sprintf("- %s\n", formattedLocation)
 	}
 	

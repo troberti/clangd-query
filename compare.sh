@@ -29,7 +29,7 @@ SAMPLE_PROJECT="$SCRIPT_DIR/test/fixtures/sample-project"
 
 echo -e "${CYAN}Comparing Go vs TypeScript implementations${NC}"
 echo -e "${YELLOW}Command:${NC} clangd-query $*"
-echo "Working directory: $SAMPLE_PROJECT"
+echo "Project directory: $SAMPLE_PROJECT"
 echo ""
 
 # Create temporary files for outputs

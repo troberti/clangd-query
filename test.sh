@@ -78,6 +78,6 @@ if [ $# -eq 0 ]; then
 else
     # Run specific command passed as arguments
     echo -e "${GREEN}Running custom command${NC}"
-    echo "Working directory: $SAMPLE_PROJECT"
+    echo "Project directory: $SAMPLE_PROJECT"
     (cd "$SAMPLE_PROJECT" && "$BINARY" "$@")
 fi

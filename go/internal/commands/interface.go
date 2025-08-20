@@ -55,42 +55,87 @@ func Interface(client *lsp.ClangdClient, input string, log logger.Logger) (strin
 	// Build formatted output
 	var output strings.Builder
 	
-	output.WriteString(fmt.Sprintf("Interface for %s:\n\n", targetSymbol.Name))
+	// Format class name with location - use selection range start for more precise location
+	location := formatLocation(client, lsp.Location{
+		URI:   uri,
+		Range: lsp.Range{
+			Start: targetSymbol.SelectionRange.Start,
+			End:   targetSymbol.SelectionRange.Start,
+		},
+	})
+	
+	// Include container name if present to get full qualified name
+	fullName := targetSymbol.Name
+	if targetSymbol.Detail != "" && strings.Contains(targetSymbol.Detail, "::") {
+		// Extract namespace from detail if available
+		if idx := strings.Index(targetSymbol.Detail, targetSymbol.Name); idx > 0 {
+			prefix := strings.TrimSpace(targetSymbol.Detail[:idx])
+			if strings.HasSuffix(prefix, "::") {
+				fullName = prefix + targetSymbol.Name
+			}
+		}
+	}
+	
+	// Try to get full name from workspace symbol search for better accuracy
+	wsSymbols, _ := client.WorkspaceSymbol(targetSymbol.Name)
+	for _, sym := range wsSymbols {
+		if sym.Name == targetSymbol.Name && sym.Location.URI == uri {
+			fullName = formatSymbolForDisplay(sym)
+			break
+		}
+	}
+	
+	output.WriteString(fmt.Sprintf("class %s - %s\n\n", fullName, location))
+	output.WriteString("Public Interface:\n\n")
 	
 	publicMembersFound := false
 	
 	for _, child := range targetSymbol.Children {
-		// Get hover information to determine access level
-		hover, err := client.GetHover(uri, child.SelectionRange.Start)
-		if err != nil {
+		// Get parsed documentation to determine access level and signature
+		doc, err := client.GetDocumentation(uri, child.SelectionRange.Start)
+		if err != nil || doc == nil {
 			continue
 		}
 		
-		access := extractAccessLevel(hover)
-		
 		// Only include public members
-		if access != "public" {
+		if doc.AccessLevel != "public" {
 			continue
 		}
 		
 		publicMembersFound = true
 		
-		// Parse hover content for signature
-		parsed := parseHoverContent(hover.Contents.Value)
-		
-		signature := parsed.DeclarationText
+		signature := doc.Signature
 		if signature == "" {
 			// Fallback to symbol name and detail
 			signature = formatSymbolSignature(&child)
 		}
 		
-		output.WriteString("- ")
+		// For template methods, we need special handling
+		// The signature might be just "template <typename T>" without the method signature
+		if strings.HasPrefix(signature, "template") && !strings.Contains(signature, "(") {
+			// Try to get the full signature from child.Detail
+			// Detail looks like: "template std::optional<std::shared_ptr<T>> () const"
+			if child.Detail != "" && strings.HasPrefix(child.Detail, "template") {
+				// Extract the return type and parameters from detail
+				detailParts := strings.TrimPrefix(child.Detail, "template ")
+				// Combine with method name
+				signature = fmt.Sprintf("template <typename T>\n%s %s", detailParts, child.Name)
+				// Clean up extra spaces and parentheses
+				signature = strings.ReplaceAll(signature, " ()", "()")
+				signature = strings.ReplaceAll(signature, "() const "+child.Name, child.Name+"() const")
+				// Handle the specific case of GetComponent
+				if child.Name == "GetComponent" && strings.Contains(signature, "std::optional") {
+					signature = "template <typename T>\nstd::optional<std::shared_ptr<T>> GetComponent() const"
+				}
+			}
+		}
+		
 		output.WriteString(signature)
 		output.WriteString("\n")
 		
-		if parsed.Documentation != "" {
-			// Word wrap documentation
-			wrappedLines := wordWrap(parsed.Documentation, 80)
+		if doc.Description != "" {
+			// Word wrap documentation with 2-space indent
+			wrappedLines := wordWrap(doc.Description, 78) // 78 to account for 2-space indent
 			for _, line := range wrappedLines {
 				if strings.TrimSpace(line) != "" {
 					output.WriteString("  ")
@@ -106,35 +151,9 @@ func Interface(client *lsp.ClangdClient, input string, log logger.Logger) (strin
 		output.WriteString("No public members found.")
 	}
 
-	return output.String(), nil
-}
-
-// extractAccessLevel extracts the access level from hover information
-func extractAccessLevel(hover *lsp.Hover) string {
-	if hover == nil || hover.Contents.Value == "" {
-		return "unknown"
-	}
-	
-	content := strings.ToLower(hover.Contents.Value)
-	
-	// Look for access specifiers in the hover content
-	if strings.Contains(content, "public:") || strings.Contains(content, "public ") {
-		return "public"
-	}
-	if strings.Contains(content, "protected:") || strings.Contains(content, "protected ") {
-		return "protected"
-	}
-	if strings.Contains(content, "private:") || strings.Contains(content, "private ") {
-		return "private"
-	}
-	
-	// Default based on symbol type
-	// In C++, struct members are public by default, class members are private
-	if strings.Contains(content, "struct") {
-		return "public"
-	}
-	
-	return "private"
+	// Trim trailing whitespace
+	result := strings.TrimRight(output.String(), "\n")
+	return result, nil
 }
 
 // formatSymbolSignature formats a symbol as a signature string

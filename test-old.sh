@@ -85,6 +85,6 @@ if [ $# -eq 0 ]; then
 else
     # Run specific command passed as arguments
     echo -e "${GREEN}Running custom command (TypeScript)${NC}"
-    echo "Working directory: $SAMPLE_PROJECT"
+    echo "Project directory: $SAMPLE_PROJECT"
     (cd "$SAMPLE_PROJECT" && node "$CLIENT_JS" "$@")
 fi

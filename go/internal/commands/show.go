@@ -259,7 +259,7 @@ func Show(client *lsp.ClangdClient, query string, log logger.Logger) (string, er
 
 		// Format the section header
 		result += "\n"
-		formattedLoc := formatLocation(client, loc.path, startLine)
+		formattedLoc := formatLocationSimple(client, loc.path, startLine)
 
 		// Always show the type for functions/methods/constructors
 		if symbol.Kind == lsp.SymbolKindFunction || 
@@ -368,14 +368,6 @@ func symbolKindToString(kind lsp.SymbolKind) string {
 	}
 }
 
-// formatLocation formats a file path and line number for display
-func formatLocation(client *lsp.ClangdClient, path string, line int) string {
-	// Make path relative
-	if relPath, err := filepath.Rel(client.ProjectRoot, path); err == nil {
-		path = relPath
-	}
-	return fmt.Sprintf("%s:%d:%d", path, line+1, 0)
-}
 
 // min returns the minimum of two integers
 func min(a, b int) int {

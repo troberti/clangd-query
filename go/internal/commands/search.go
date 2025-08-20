@@ -20,7 +20,7 @@ func Search(client *lsp.ClangdClient, query string, limit int, log logger.Logger
 		return "", err
 	}
 	
-	log.Debug("Found %d symbols", len(symbols))
+	log.Debug("Found %d total symbols", len(symbols))
 
 	// Handle no results
 	if len(symbols) == 0 {
@@ -32,15 +32,15 @@ func Search(client *lsp.ClangdClient, query string, limit int, log logger.Logger
 		return fmt.Sprintf(`No symbols found matching "%s"`, query), nil
 	}
 
-	// Build output
+	// Apply limit to match TypeScript behavior
+	if limit > 0 && len(symbols) > limit {
+		symbols = symbols[:limit]
+	}
+
+	// Build output - report actual number of symbols we'll show
 	output := fmt.Sprintf(`Found %d symbols matching "%s":`+"\n\n", len(symbols), query)
 
-	count := 0
 	for _, symbol := range symbols {
-		// Apply limit
-		if limit > 0 && count >= limit {
-			break
-		}
 
 		// Build the fully qualified name with type prefix
 		fullName := formatSymbolWithType(symbol)
@@ -59,7 +59,6 @@ func Search(client *lsp.ClangdClient, query string, limit int, log logger.Logger
 
 		// Format with bullet point, backticks, and "at" prefix
 		output += fmt.Sprintf("- `%s` at %s\n", fullName, formattedLocation)
-		count++
 	}
 
 	// Remove trailing newline

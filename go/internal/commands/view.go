@@ -220,7 +220,7 @@ func View(client *lsp.ClangdClient, query string, log logger.Logger) (string, er
 	symbolDescription := fmt.Sprintf("%s '%s'", symbolKindName, fullName)
 
 	// Format the location
-	formattedLocation := formatLocation(client, filePath, symbol.Location.Range.Start.Line)
+	formattedLocation := formatLocationSimple(client, filePath, symbol.Location.Range.Start.Line)
 
 	// Check if we found multiple matches
 	var multipleMatchesNote string

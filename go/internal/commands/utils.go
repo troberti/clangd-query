@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"clangd-query/internal/lsp"
@@ -116,4 +117,31 @@ func wordWrap(text string, maxWidth int) []string {
 	}
 
 	return lines
+}
+
+// formatLocation formats a location (with file, line, and column) for display
+// Converts URI to relative path and uses 1-based indexing for editor compatibility
+func formatLocation(client *lsp.ClangdClient, location lsp.Location) string {
+	// Extract path from URI
+	path := strings.TrimPrefix(location.URI, "file://")
+	
+	// Make path relative
+	if relPath, err := filepath.Rel(client.ProjectRoot, path); err == nil {
+		path = relPath
+	}
+	
+	// Format with 1-based line and column numbers
+	return fmt.Sprintf("%s:%d:%d", path, 
+		location.Range.Start.Line+1, 
+		location.Range.Start.Character+1)
+}
+
+// formatLocationSimple formats a file path and line number for display  
+// Used when we only have path and line (no column shown)
+func formatLocationSimple(client *lsp.ClangdClient, path string, line int) string {
+	// Make path relative
+	if relPath, err := filepath.Rel(client.ProjectRoot, path); err == nil {
+		path = relPath
+	}
+	return fmt.Sprintf("%s:%d", path, line+1)
 }
