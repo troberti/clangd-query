@@ -259,7 +259,8 @@ func Show(client *lsp.ClangdClient, query string, log logger.Logger) (string, er
 
 		// Format the section header
 		result += "\n"
-		formattedLoc := formatLocationSimple(client, loc.path, startLine)
+		// Use formatLocation with full location info including column
+		formattedLoc := formatLocation(client, loc.location)
 
 		// Always show the type for functions/methods/constructors
 		if symbol.Kind == lsp.SymbolKindFunction || 
