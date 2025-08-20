@@ -42,22 +42,36 @@ Write comprehensive documentation for all Go code using proper prose, not terse 
 
 ### What to Document
 - **Types and Structs**: Start with a high-level description of what the type represents and its role in the system. Explain its lifecycle, usage patterns, and any important invariants.
-- **Fields**: Describe not just what the field stores, but why it exists, when it's set, valid value ranges, and relationships to other fields.
+- **Fields**: Describe what the field stores, why it exists, when it's set, valid value ranges, and relationships to other fields. Avoid starting with the field name itself.
 - **Functions**: Explain the function's purpose, its parameters, return values, error conditions, side effects, and any concurrency considerations.
 - **Interfaces**: Document the contract that implementations must fulfill, including behavioral requirements beyond just method signatures.
 
 ### Example of Good Documentation
 ```go
-// ParsedDocumentation represents structured documentation extracted from clangd's hover response.
+// Plain data struct to represents structured documentation extracted from clangd's hover response.
 // This struct provides a consistent interface for accessing various pieces of documentation
 // without needing to parse raw markdown in individual commands. All parsing logic should be
 // centralized in the GetDocumentation method to ensure consistency across the codebase.
 type ParsedDocumentation struct {
-    // Description contains the cleaned documentation text without technical details like
-    // size/offset/alignment information. This is the human-readable documentation that
-    // explains what a symbol does, typically extracted from doc comments like @brief or
-    // plain documentation text. Line breaks and formatting are preserved where meaningful.
+    // The cleaned documentation text without technical details like size/offset/alignment
+    // information. Contains the human-readable documentation that explains what a symbol
+    // does, typically extracted from doc comments like @brief or plain documentation text.
+    // Line breaks and formatting are preserved where meaningful.
     Description string
+}
+
+// A simple struct to hold the context for running tests, including paths and
+// utilities for executing the clangd-query binary and asserting on its output.
+type TestContext struct {
+    // Path to the clangd-query binary that will be tested.
+    BinaryPath string
+
+    // Path to the C++ test fixture project that provides a known codebase
+    // for testing clangd-query commands.
+    SampleProjectPath string
+
+    // The testing context from Go's testing package.
+    T *testing.T
 }
 ```
 
@@ -116,3 +130,13 @@ func GetValue() int
 - The daemon should start quickly and cache clangd connections
 - Use in-memory log buffers to avoid excessive file I/O
 - Implement timeouts for all network operations
+
+
+## Development
+
+Use `./test.sh` to run the clangd-query tool in Go against the test source
+database. Use `./test-old.sh` to use the old Typescript version.
+
+Use `./compare.sh` to run both versions and compare their output.
+
+ONLY use these tools when developing.
