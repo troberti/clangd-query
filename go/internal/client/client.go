@@ -24,24 +24,215 @@ type Config struct {
 	ProjectRoot string
 }
 
-// Request represents a request to the daemon
+// Client handles communication with the daemon
+type Client struct {
+	conn    net.Conn
+	encoder *json.Encoder
+	decoder *json.Decoder
+	timeout time.Duration
+	reqID   int
+}
+
+// RPCOptions contains options for RPC calls
+type RPCOptions struct {
+	Timeout time.Duration // Custom timeout for this call
+}
+
+// Request represents a JSON-RPC request
 type Request struct {
 	ID     int                    `json:"id"`
 	Method string                 `json:"method"`
 	Params map[string]interface{} `json:"params,omitempty"`
 }
 
-// Response represents a response from the daemon
+// Response represents a JSON-RPC response
 type Response struct {
 	ID     int             `json:"id"`
 	Result json.RawMessage `json:"result,omitempty"`
 	Error  *ErrorResponse  `json:"error,omitempty"`
 }
 
-// ErrorResponse represents an error response
+// ErrorResponse represents an error in a response
 type ErrorResponse struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
+}
+
+// StatusInfo represents daemon status
+type StatusInfo struct {
+	PID           int    `json:"pid"`
+	ProjectRoot   string `json:"projectRoot"`
+	Uptime        string `json:"uptime"`
+	TotalRequests int    `json:"totalRequests"`
+	Connections   int    `json:"connections"`
+}
+
+// NewClient creates a new client connected to the daemon
+func NewClient(conn net.Conn, timeout time.Duration) *Client {
+	return &Client{
+		conn:    conn,
+		encoder: json.NewEncoder(conn),
+		decoder: json.NewDecoder(conn),
+		timeout: timeout,
+		reqID:   1,
+	}
+}
+
+// CallRPC makes a generic RPC call to the daemon
+func (c *Client) CallRPC(method string, params map[string]interface{}, opts *RPCOptions) (json.RawMessage, error) {
+	// Use custom timeout if provided
+	timeout := c.timeout
+	if opts != nil && opts.Timeout > 0 {
+		timeout = opts.Timeout
+	}
+
+	// Create request
+	req := Request{
+		ID:     c.reqID,
+		Method: method,
+		Params: params,
+	}
+	c.reqID++
+
+	// Send request
+	if err := c.encoder.Encode(req); err != nil {
+		return nil, fmt.Errorf("failed to send request: %v", err)
+	}
+
+	// Set read timeout
+	c.conn.SetReadDeadline(time.Now().Add(timeout))
+
+	// Read response
+	var resp Response
+	if err := c.decoder.Decode(&resp); err != nil {
+		if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+			return nil, fmt.Errorf("request timeout after %v", timeout)
+		}
+		return nil, fmt.Errorf("failed to read response: %v", err)
+	}
+
+	// Check for error
+	if resp.Error != nil {
+		return nil, fmt.Errorf("%s", resp.Error.Message)
+	}
+
+	return resp.Result, nil
+}
+
+// CallTyped makes an RPC call and unmarshals the result into the provided interface
+func (c *Client) CallTyped(method string, params map[string]interface{}, result interface{}) error {
+	raw, err := c.CallRPC(method, params, nil)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(raw, result)
+}
+
+// Search searches for symbols
+func (c *Client) Search(query string, limit int) ([]commands.SearchResult, error) {
+	params := map[string]interface{}{
+		"query": query,  // Keep "query" for search since it's a search query, not a symbol
+		"limit": limit,
+	}
+
+	var results []commands.SearchResult
+	err := c.CallTyped("search", params, &results)
+	return results, err
+}
+
+// Show shows declaration and definition
+func (c *Client) Show(symbolOrLocation string) ([]commands.ShowResult, error) {
+	params := map[string]interface{}{
+		"symbol": symbolOrLocation,
+	}
+
+	var results []commands.ShowResult
+	err := c.CallTyped("show", params, &results)
+	return results, err
+}
+
+// View views complete source code
+func (c *Client) View(symbolOrLocation string) (*commands.ViewResult, error) {
+	params := map[string]interface{}{
+		"symbol": symbolOrLocation,
+	}
+
+	var result commands.ViewResult
+	err := c.CallTyped("view", params, &result)
+	return &result, err
+}
+
+// Usages finds all usages of a symbol
+func (c *Client) Usages(symbolOrLocation string, limit int) ([]commands.UsageResult, error) {
+	params := map[string]interface{}{
+		"symbol": symbolOrLocation,
+		"limit":  limit,
+	}
+
+	var results []commands.UsageResult
+	err := c.CallTyped("usages", params, &results)
+	return results, err
+}
+
+// Hierarchy shows type hierarchy
+func (c *Client) Hierarchy(symbolOrLocation string, limit int) (*commands.HierarchyResult, error) {
+	params := map[string]interface{}{
+		"symbol": symbolOrLocation,
+		"limit":  limit,
+	}
+
+	var result commands.HierarchyResult
+	err := c.CallTyped("hierarchy", params, &result)
+	return &result, err
+}
+
+// Signature shows function signature
+func (c *Client) Signature(symbolOrLocation string) ([]commands.SignatureResult, error) {
+	params := map[string]interface{}{
+		"symbol": symbolOrLocation,
+	}
+
+	var results []commands.SignatureResult
+	err := c.CallTyped("signature", params, &results)
+	return results, err
+}
+
+// Interface shows public interface
+func (c *Client) Interface(symbolOrLocation string) (*commands.InterfaceResult, error) {
+	params := map[string]interface{}{
+		"symbol": symbolOrLocation,
+	}
+
+	var result commands.InterfaceResult
+	err := c.CallTyped("interface", params, &result)
+	return &result, err
+}
+
+// GetLogs retrieves daemon logs
+func (c *Client) GetLogs(level string) (string, error) {
+	params := map[string]interface{}{
+		"level": level,
+	}
+
+	var logsResponse map[string]string
+	err := c.CallTyped("logs", params, &logsResponse)
+	if err != nil {
+		return "", err
+	}
+	return logsResponse["logs"], nil
+}
+
+// GetStatus retrieves daemon status
+func (c *Client) GetStatus() (*StatusInfo, error) {
+	var status StatusInfo
+	err := c.CallTyped("status", map[string]interface{}{}, &status)
+	return &status, err
+}
+
+// Shutdown initiates daemon shutdown
+func (c *Client) Shutdown() error {
+	_, err := c.CallRPC("shutdown", map[string]interface{}{}, nil)
+	return err
 }
 
 // Run executes the client with the given configuration
@@ -94,14 +285,158 @@ func Run(config *Config) error {
 	}
 	defer conn.Close()
 
-	// Handle special commands that don't go through the command system
-	switch config.Command {
-	case "logs", "status", "shutdown":
-		return handleSpecialCommand(conn, config)
+	// Create client
+	client := NewClient(conn, time.Duration(config.Timeout)*time.Second)
+
+	// Define which commands need a symbol parameter
+	symbolCommands := map[string]bool{
+		"search":    true,
+		"show":      true,
+		"view":      true,
+		"usages":    true,
+		"hierarchy": true,
+		"signature": true,
+		"interface": true,
 	}
 
-	// Execute command through the command system
-	return executeCommand(conn, config)
+	// Extract symbol if needed
+	symbol := ""
+	if symbolCommands[config.Command] {
+		if len(config.Arguments) == 0 {
+			return fmt.Errorf("%s requires a symbol argument", config.Command)
+		}
+		symbol = config.Arguments[0]
+	}
+
+	// Execute command
+	switch config.Command {
+	case "search":
+		results, err := client.Search(symbol, config.Limit)
+		if err != nil {
+			return err
+		}
+		for _, r := range results {
+			fmt.Printf("%s %s:%d:%d %s\n", 
+				r.Kind, r.File, r.Line, r.Column, r.Name)
+		}
+
+	case "show":
+		results, err := client.Show(symbol)
+		if err != nil {
+			return err
+		}
+		for i, r := range results {
+			if i > 0 {
+				fmt.Println("\n---")
+			}
+			fmt.Printf("%s:%d:%d:\n", r.File, r.Line, r.Column)
+			fmt.Print(r.Content)
+			if !strings.HasSuffix(r.Content, "\n") {
+				fmt.Println()
+			}
+		}
+
+	case "view":
+		result, err := client.View(symbol)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("%s:%d:%d:\n", result.File, result.Line, result.Column)
+		fmt.Print(result.Content)
+		if !strings.HasSuffix(result.Content, "\n") {
+			fmt.Println()
+		}
+
+	case "usages":
+		results, err := client.Usages(symbol, config.Limit)
+		if err != nil {
+			return err
+		}
+		for _, r := range results {
+			fmt.Printf("%s:%d:%d: %s\n", 
+				r.File, r.Line, r.Column, r.Snippet)
+		}
+
+	case "hierarchy":
+		result, err := client.Hierarchy(symbol, config.Limit)
+		if err != nil {
+			return err
+		}
+		fmt.Print(result.Tree)
+
+	case "signature":
+		results, err := client.Signature(symbol)
+		if err != nil {
+			return err
+		}
+		for i, r := range results {
+			if i > 0 {
+				fmt.Println()
+			}
+			fmt.Println(r.Signature)
+			if r.Documentation != "" {
+				fmt.Println(r.Documentation)
+			}
+		}
+
+	case "interface":
+		result, err := client.Interface(symbol)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("Public interface of %s:\n\n", result.Name)
+		for _, member := range result.Members {
+			fmt.Printf("%s\n", member.Signature)
+			if member.Documentation != "" {
+				fmt.Printf("  %s\n", member.Documentation)
+			}
+			fmt.Println()
+		}
+
+	case "logs":
+		// Parse log level from arguments
+		logLevel := "info" // default
+		for _, arg := range config.Arguments {
+			if arg == "--verbose" || arg == "-v" {
+				logLevel = "verbose"
+			} else if arg == "--error" || arg == "-e" {
+				logLevel = "error"
+			}
+		}
+		// Global verbose flag overrides
+		if config.Verbose {
+			logLevel = "verbose"
+		}
+
+		logs, err := client.GetLogs(logLevel)
+		if err != nil {
+			return err
+		}
+		fmt.Print(logs)
+
+	case "status":
+		status, err := client.GetStatus()
+		if err != nil {
+			return err
+		}
+		fmt.Printf("Daemon Status:\n")
+		fmt.Printf("  PID: %d\n", status.PID)
+		fmt.Printf("  Project: %s\n", status.ProjectRoot)
+		fmt.Printf("  Uptime: %s\n", status.Uptime)
+		fmt.Printf("  Requests: %d\n", status.TotalRequests)
+		fmt.Printf("  Connections: %d\n", status.Connections)
+
+	case "shutdown":
+		if err := client.Shutdown(); err != nil {
+			return err
+		}
+		fmt.Println("Daemon shutdown initiated")
+
+	default:
+		return fmt.Errorf("unknown command: %s", config.Command)
+	}
+
+	return nil
 }
 
 func startDaemon(projectRoot string, verbose bool) error {
@@ -159,222 +494,4 @@ func startDaemon(projectRoot string, verbose bool) error {
 	}
 
 	return fmt.Errorf("daemon failed to start within timeout")
-}
-
-func handleSpecialCommand(conn net.Conn, config *Config) error {
-	// Send request
-	req := Request{
-		ID:     1,
-		Method: config.Command,
-		Params: make(map[string]interface{}),
-	}
-	
-	// For logs command, pass the log level
-	if config.Command == "logs" {
-		// Check for --verbose or --error in arguments
-		logLevel := "info" // default
-		for _, arg := range config.Arguments {
-			if arg == "--verbose" || arg == "-v" {
-				logLevel = "verbose"
-			} else if arg == "--error" || arg == "-e" {
-				logLevel = "error"
-			}
-		}
-		// Global verbose flag overrides
-		if config.Verbose {
-			logLevel = "verbose"
-		}
-		req.Params["level"] = logLevel
-	}
-
-	encoder := json.NewEncoder(conn)
-	if err := encoder.Encode(req); err != nil {
-		return fmt.Errorf("failed to send request: %v", err)
-	}
-
-	// Read response
-	decoder := json.NewDecoder(conn)
-	var resp Response
-	if err := decoder.Decode(&resp); err != nil {
-		return fmt.Errorf("failed to read response: %v", err)
-	}
-
-	if resp.Error != nil {
-		return fmt.Errorf("%s", resp.Error.Message)
-	}
-
-	// Handle based on command
-	switch config.Command {
-	case "logs":
-		var result map[string]string
-		if err := json.Unmarshal(resp.Result, &result); err != nil {
-			return err
-		}
-		fmt.Print(result["logs"])
-
-	case "status":
-		var status map[string]interface{}
-		if err := json.Unmarshal(resp.Result, &status); err != nil {
-			return err
-		}
-		fmt.Printf("Daemon Status:\n")
-		fmt.Printf("  PID: %v\n", status["pid"])
-		fmt.Printf("  Project: %v\n", status["projectRoot"])
-		fmt.Printf("  Uptime: %v\n", status["uptime"])
-		fmt.Printf("  Requests: %v\n", status["totalRequests"])
-		fmt.Printf("  Connections: %v\n", status["connections"])
-
-	case "shutdown":
-		fmt.Println("Daemon shutdown initiated")
-	}
-
-	return nil
-}
-
-func executeCommand(conn net.Conn, config *Config) error {
-	// Prepare command parameters
-	params := make(map[string]interface{})
-	params["command"] = config.Command
-	params["arguments"] = config.Arguments
-	params["limit"] = config.Limit
-	params["timeout"] = config.Timeout
-	params["verbose"] = config.Verbose
-	params["projectRoot"] = config.ProjectRoot
-
-	// Send request
-	req := Request{
-		ID:     1,
-		Method: config.Command,
-		Params: params,
-	}
-
-	encoder := json.NewEncoder(conn)
-	if err := encoder.Encode(req); err != nil {
-		return fmt.Errorf("failed to send request: %v", err)
-	}
-
-	// Set read timeout based on command timeout
-	conn.SetReadDeadline(time.Now().Add(time.Duration(config.Timeout) * time.Second))
-
-	// Read response
-	decoder := json.NewDecoder(conn)
-	var resp Response
-	if err := decoder.Decode(&resp); err != nil {
-		if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-			return fmt.Errorf("request timeout after %d seconds", config.Timeout)
-		}
-		return fmt.Errorf("failed to read response: %v", err)
-	}
-
-	if resp.Error != nil {
-		return fmt.Errorf("%s", resp.Error.Message)
-	}
-
-	// Parse and display result based on command
-	return displayResult(config.Command, resp.Result)
-}
-
-func displayResult(command string, result json.RawMessage) error {
-	// The result format depends on the command
-	// For now, just print the raw JSON
-	// This will be replaced with proper formatting when we implement the commands
-	
-	switch command {
-	case "search":
-		var results []commands.SearchResult
-		if err := json.Unmarshal(result, &results); err != nil {
-			// Fallback to raw output
-			fmt.Println(string(result))
-			return nil
-		}
-		for _, r := range results {
-			fmt.Printf("%s %s:%d:%d %s\n", 
-				r.Kind, r.File, r.Line, r.Column, r.Name)
-		}
-
-	case "show":
-		var results []commands.ShowResult
-		if err := json.Unmarshal(result, &results); err != nil {
-			fmt.Println(string(result))
-			return nil
-		}
-		for i, r := range results {
-			if i > 0 {
-				fmt.Println("\n---")
-			}
-			fmt.Printf("%s:%d:%d:\n", r.File, r.Line, r.Column)
-			fmt.Print(r.Content)
-			if !strings.HasSuffix(r.Content, "\n") {
-				fmt.Println()
-			}
-		}
-
-	case "view":
-		var viewResult commands.ViewResult
-		if err := json.Unmarshal(result, &viewResult); err != nil {
-			fmt.Println(string(result))
-			return nil
-		}
-		fmt.Printf("%s:%d:%d:\n", viewResult.File, viewResult.Line, viewResult.Column)
-		fmt.Print(viewResult.Content)
-		if !strings.HasSuffix(viewResult.Content, "\n") {
-			fmt.Println()
-		}
-
-	case "usages":
-		var results []commands.UsageResult
-		if err := json.Unmarshal(result, &results); err != nil {
-			fmt.Println(string(result))
-			return nil
-		}
-		for _, r := range results {
-			fmt.Printf("%s:%d:%d: %s\n", 
-				r.File, r.Line, r.Column, r.Snippet)
-		}
-
-	case "hierarchy":
-		var hierarchyResult commands.HierarchyResult
-		if err := json.Unmarshal(result, &hierarchyResult); err != nil {
-			fmt.Println(string(result))
-			return nil
-		}
-		fmt.Print(hierarchyResult.Tree)
-
-	case "signature":
-		var results []commands.SignatureResult
-		if err := json.Unmarshal(result, &results); err != nil {
-			fmt.Println(string(result))
-			return nil
-		}
-		for i, r := range results {
-			if i > 0 {
-				fmt.Println()
-			}
-			fmt.Println(r.Signature)
-			if r.Documentation != "" {
-				fmt.Println(r.Documentation)
-			}
-		}
-
-	case "interface":
-		var interfaceResult commands.InterfaceResult
-		if err := json.Unmarshal(result, &interfaceResult); err != nil {
-			fmt.Println(string(result))
-			return nil
-		}
-		fmt.Printf("Public interface of %s:\n\n", interfaceResult.Name)
-		for _, member := range interfaceResult.Members {
-			fmt.Printf("%s\n", member.Signature)
-			if member.Documentation != "" {
-				fmt.Printf("  %s\n", member.Documentation)
-			}
-			fmt.Println()
-		}
-
-	default:
-		// Unknown command, just print raw result
-		fmt.Println(string(result))
-	}
-
-	return nil
 }

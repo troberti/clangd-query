@@ -387,100 +387,108 @@ func (d *Daemon) forwardToClangd(req Request) (json.RawMessage, error) {
 		limit = int(l)
 	}
 	
-	// Handle each command
+	// Handle each command based on method
 	switch req.Method {
 	case "search":
-		query, ok := params["arguments"].([]interface{})
-		if !ok || len(query) == 0 {
-			return nil, fmt.Errorf("search requires a query argument")
+		query, _ := params["query"].(string)
+		if query == "" {
+			d.logger.Error("search command called without query parameter")
+			return nil, fmt.Errorf("search requires a query parameter")
 		}
-		queryStr := fmt.Sprintf("%v", query[0])
 		
-		results, err := commands.Search(d.clangdClient, queryStr, limit, d.logger)
+		results, err := commands.Search(d.clangdClient, query, limit, d.logger)
 		if err != nil {
+			d.logger.Error("search command failed: %v", err)
 			return nil, err
 		}
 		return json.Marshal(results)
 		
 	case "show":
-		args, ok := params["arguments"].([]interface{})
-		if !ok || len(args) == 0 {
-			return nil, fmt.Errorf("show requires a symbol or location argument")
+		symbol, _ := params["symbol"].(string)
+		if symbol == "" {
+			d.logger.Error("show command called without symbol parameter")
+			return nil, fmt.Errorf("show requires a symbol parameter")
 		}
-		input := fmt.Sprintf("%v", args[0])
 		
-		results, err := commands.Show(d.clangdClient, input, d.logger)
+		results, err := commands.Show(d.clangdClient, symbol, d.logger)
 		if err != nil {
+			d.logger.Error("show command failed: %v", err)
 			return nil, err
 		}
 		return json.Marshal(results)
 		
 	case "view":
-		args, ok := params["arguments"].([]interface{})
-		if !ok || len(args) == 0 {
-			return nil, fmt.Errorf("view requires a symbol or location argument")
+		symbol, _ := params["symbol"].(string)
+		if symbol == "" {
+			d.logger.Error("view command called without symbol parameter")
+			return nil, fmt.Errorf("view requires a symbol parameter")
 		}
-		input := fmt.Sprintf("%v", args[0])
 		
-		result, err := commands.View(d.clangdClient, input, d.logger)
+		result, err := commands.View(d.clangdClient, symbol, d.logger)
 		if err != nil {
+			d.logger.Error("view command failed: %v", err)
 			return nil, err
 		}
 		return json.Marshal(result)
 		
 	case "usages":
-		args, ok := params["arguments"].([]interface{})
-		if !ok || len(args) == 0 {
-			return nil, fmt.Errorf("usages requires a symbol or location argument")
+		symbol, _ := params["symbol"].(string)
+		if symbol == "" {
+			d.logger.Error("usages command called without symbol parameter")
+			return nil, fmt.Errorf("usages requires a symbol parameter")
 		}
-		input := fmt.Sprintf("%v", args[0])
 		
-		results, err := commands.Usages(d.clangdClient, input, limit, d.logger)
+		results, err := commands.Usages(d.clangdClient, symbol, limit, d.logger)
 		if err != nil {
+			d.logger.Error("usages command failed: %v", err)
 			return nil, err
 		}
 		return json.Marshal(results)
 		
 	case "hierarchy":
-		args, ok := params["arguments"].([]interface{})
-		if !ok || len(args) == 0 {
-			return nil, fmt.Errorf("hierarchy requires a symbol or location argument")
+		symbol, _ := params["symbol"].(string)
+		if symbol == "" {
+			d.logger.Error("hierarchy command called without symbol parameter")
+			return nil, fmt.Errorf("hierarchy requires a symbol parameter")
 		}
-		input := fmt.Sprintf("%v", args[0])
 		
-		result, err := commands.Hierarchy(d.clangdClient, input, limit, d.logger)
+		result, err := commands.Hierarchy(d.clangdClient, symbol, limit, d.logger)
 		if err != nil {
+			d.logger.Error("hierarchy command failed: %v", err)
 			return nil, err
 		}
 		return json.Marshal(result)
 		
 	case "signature":
-		args, ok := params["arguments"].([]interface{})
-		if !ok || len(args) == 0 {
-			return nil, fmt.Errorf("signature requires a symbol or location argument")
+		symbol, _ := params["symbol"].(string)
+		if symbol == "" {
+			d.logger.Error("signature command called without symbol parameter")
+			return nil, fmt.Errorf("signature requires a symbol parameter")
 		}
-		input := fmt.Sprintf("%v", args[0])
 		
-		results, err := commands.Signature(d.clangdClient, input, d.logger)
+		results, err := commands.Signature(d.clangdClient, symbol, d.logger)
 		if err != nil {
+			d.logger.Error("signature command failed: %v", err)
 			return nil, err
 		}
 		return json.Marshal(results)
 		
 	case "interface":
-		args, ok := params["arguments"].([]interface{})
-		if !ok || len(args) == 0 {
-			return nil, fmt.Errorf("interface requires a symbol or location argument")
+		symbol, _ := params["symbol"].(string)
+		if symbol == "" {
+			d.logger.Error("interface command called without symbol parameter")
+			return nil, fmt.Errorf("interface requires a symbol parameter")
 		}
-		input := fmt.Sprintf("%v", args[0])
 		
-		result, err := commands.Interface(d.clangdClient, input, d.logger)
+		result, err := commands.Interface(d.clangdClient, symbol, d.logger)
 		if err != nil {
+			d.logger.Error("interface command failed: %v", err)
 			return nil, err
 		}
 		return json.Marshal(result)
 		
 	default:
+		d.logger.Error("unknown command: %s", req.Method)
 		return nil, fmt.Errorf("unknown command: %s", req.Method)
 	}
 }
