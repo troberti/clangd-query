@@ -5,10 +5,9 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 
-	"github.com/firi/clangd-query/internal/client"
-	"github.com/firi/clangd-query/internal/daemon"
+	"clangd-query/internal/client"
+	"clangd-query/internal/daemon"
 )
 
 type Config struct {
@@ -27,42 +26,48 @@ func parseArgs(args []string) (*Config, error) {
 		Timeout: 30,
 	}
 
-	var positionalArgs []string
-	i := 0
+	if len(args) == 0 {
+		return config, nil
+	}
 
+	// Command is always first argument (unless it's --help)
+	if args[0] == "--help" || args[0] == "-h" {
+		config.Help = true
+		return config, nil
+	}
+
+	// First arg is the command
+	config.Command = args[0]
+	
+	// Parse everything after the command
+	i := 1
+	var commandArgs []string
+	
 	for i < len(args) {
 		arg := args[i]
 
-		if strings.HasPrefix(arg, "--") {
-			// Handle flags
-			if arg == "--help" || arg == "-h" {
-				config.Help = true
-				i++
-				continue
-			}
+		// Check if it's a global flag
+		if arg == "--help" || arg == "-h" {
+			config.Help = true
+			i++
+			continue
+		}
 
-			if arg == "--verbose" || arg == "-v" {
-				config.Verbose = true
-				i++
-				continue
-			}
+		if arg == "--verbose" || arg == "-v" {
+			config.Verbose = true
+			i++
+			continue
+		}
 
-			// Handle flags with values
-			var key, value string
-			if strings.Contains(arg, "=") {
-				parts := strings.SplitN(arg, "=", 2)
-				key = parts[0]
-				value = parts[1]
-				i++
-			} else if i+1 < len(args) && !strings.HasPrefix(args[i+1], "--") {
-				key = arg
-				value = args[i+1]
-				i += 2
-			} else {
+		// Handle global flags with values
+		if arg == "--limit" || arg == "--timeout" {
+			if i+1 >= len(args) {
 				return nil, fmt.Errorf("flag %s requires a value", arg)
 			}
-
-			switch key {
+			
+			value := args[i+1]
+			
+			switch arg {
 			case "--limit":
 				limit, err := strconv.Atoi(value)
 				if err != nil {
@@ -75,22 +80,17 @@ func parseArgs(args []string) (*Config, error) {
 					return nil, fmt.Errorf("invalid timeout value: %s", value)
 				}
 				config.Timeout = timeout
-			default:
-				return nil, fmt.Errorf("unknown flag: %s", key)
 			}
-		} else {
-			// Positional argument
-			positionalArgs = append(positionalArgs, arg)
-			i++
+			i += 2
+			continue
 		}
+
+		// Everything else is a command argument
+		commandArgs = append(commandArgs, arg)
+		i++
 	}
 
-	// First positional arg is the command
-	if len(positionalArgs) > 0 {
-		config.Command = positionalArgs[0]
-		config.Arguments = positionalArgs[1:]
-	}
-
+	config.Arguments = commandArgs
 	return config, nil
 }
 
@@ -141,8 +141,12 @@ func findProjectRoot(startDir string) (string, error) {
 	return "", fmt.Errorf("no CMakeLists.txt found in any parent directory")
 }
 
-func runDaemon(projectRoot string) {
-	daemon.Run(projectRoot)
+func runDaemon(projectRoot string, verbose bool) {
+	config := &daemon.Config{
+		ProjectRoot: projectRoot,
+		Verbose:     verbose,
+	}
+	daemon.Run(config)
 }
 
 func runClient(config *Config) {
@@ -168,7 +172,16 @@ func main() {
 			fmt.Fprintf(os.Stderr, "daemon mode requires project root argument\n")
 			os.Exit(1)
 		}
-		runDaemon(os.Args[2])
+		projectRoot := os.Args[2]
+		verbose := false
+		// Check for --verbose flag
+		for i := 3; i < len(os.Args); i++ {
+			if os.Args[i] == "--verbose" || os.Args[i] == "-v" {
+				verbose = true
+				break
+			}
+		}
+		runDaemon(projectRoot, verbose)
 		return
 	}
 

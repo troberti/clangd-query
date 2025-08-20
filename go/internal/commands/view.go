@@ -5,11 +5,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/firi/clangd-query/internal/lsp"
+	"clangd-query/internal/logger"
+	"clangd-query/internal/lsp"
 )
 
 // View extracts complete source code using folding ranges
-func View(client *lsp.ClangdClient, input string) (*ViewResult, error) {
+func View(client *lsp.ClangdClient, input string, log logger.Logger) (*ViewResult, error) {
 	// Parse input
 	uri, position, err := parseLocationOrSymbol(client, input)
 	if err != nil {

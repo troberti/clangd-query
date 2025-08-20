@@ -6,11 +6,12 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/firi/clangd-query/internal/lsp"
+	"clangd-query/internal/logger"
+	"clangd-query/internal/lsp"
 )
 
 // Show displays both declaration and definition of a symbol
-func Show(client *lsp.ClangdClient, input string) ([]ShowResult, error) {
+func Show(client *lsp.ClangdClient, input string, log logger.Logger) ([]ShowResult, error) {
 	// Parse input - can be either symbol name or file:line:column
 	uri, position, err := parseLocationOrSymbol(client, input)
 	if err != nil {

@@ -4,12 +4,15 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
+
+	"clangd-query/internal/logger"
 )
 
 // ClangdClient manages the clangd subprocess and LSP communication
@@ -25,10 +28,11 @@ type ClangdClient struct {
 	docMu         sync.RWMutex
 	capabilities  *ServerCapabilities
 	timeout       time.Duration
+	logger        logger.Logger
 }
 
 // NewClangdClient creates and initializes a new clangd client
-func NewClangdClient(projectRoot, buildDir string) (*ClangdClient, error) {
+func NewClangdClient(projectRoot, buildDir string, log logger.Logger) (*ClangdClient, error) {
 	// Find clangd executable
 	clangdPath, err := exec.LookPath("clangd")
 	if err != nil {
@@ -48,7 +52,12 @@ func NewClangdClient(projectRoot, buildDir string) (*ClangdClient, error) {
 		"--function-arg-placeholders",
 		"--header-insertion-decorators")
 
-	cmd.Stderr = os.Stderr
+	// Create a pipe to capture and parse clangd's stderr
+	stderrPipe, err := cmd.StderrPipe()
+	if err != nil {
+		return nil, err
+	}
+
 
 	stdinPipe, err := cmd.StdinPipe()
 	if err != nil {
@@ -72,7 +81,11 @@ func NewClangdClient(projectRoot, buildDir string) (*ClangdClient, error) {
 		indexingDone:  make(chan struct{}),
 		openDocuments: make(map[string]bool),
 		timeout:       30 * time.Second,
+		logger:        log,
 	}
+
+	// Start goroutine to parse clangd stderr
+	go client.parseClangdLogs(stderrPipe)
 
 	// Register notification handlers
 	client.transport.RegisterNotificationHandler("$/progress", client.handleProgress)
@@ -168,7 +181,7 @@ func (c *ClangdClient) initialize() error {
 	if firstFile := c.getFirstSourceFile(); firstFile != "" {
 		if err := c.OpenDocument("file://" + firstFile); err != nil {
 			// Log but don't fail - indexing may still work
-			fmt.Fprintf(os.Stderr, "Warning: Failed to open first source file: %v\n", err)
+			c.logger.Info("Warning: Failed to open first source file: %v", err)
 		}
 	}
 
@@ -331,7 +344,7 @@ func (c *ClangdClient) GetDefinition(uri string, position Position) ([]Location,
 
 	// Result can be Location, Location[], or null
 	var locations []Location
-	
+
 	// Try as array first
 	if err := json.Unmarshal(result, &locations); err == nil {
 		return locations, nil
@@ -366,7 +379,7 @@ func (c *ClangdClient) GetDeclaration(uri string, position Position) ([]Location
 
 	// Result can be Location, Location[], or null
 	var locations []Location
-	
+
 	// Try as array first
 	if err := json.Unmarshal(result, &locations); err == nil {
 		return locations, nil
@@ -572,11 +585,11 @@ func (c *ClangdClient) OnFilesChanged(files []string) {
 	// Implement the close/reopen workaround for reindexing
 	for _, file := range files {
 		uri := "file://" + file
-		
+
 		c.docMu.RLock()
 		isOpen := c.openDocuments[uri]
 		c.docMu.RUnlock()
-		
+
 		if isOpen {
 			// Close and reopen to force reindexing
 			c.CloseDocument(uri)
@@ -615,32 +628,32 @@ func (c *ClangdClient) Exit() error {
 // This is needed to trigger indexing in clangd
 func (c *ClangdClient) getFirstSourceFile() string {
 	compileCommandsPath := filepath.Join(c.buildDir, "compile_commands.json")
-	
+
 	data, err := os.ReadFile(compileCommandsPath)
 	if err != nil {
 		return ""
 	}
-	
+
 	var commands []struct {
 		File string `json:"file"`
 	}
-	
+
 	if err := json.Unmarshal(data, &commands); err != nil {
 		return ""
 	}
-	
+
 	// Find the first .cc or .cpp file (skip headers)
 	for _, cmd := range commands {
 		if strings.HasSuffix(cmd.File, ".cc") || strings.HasSuffix(cmd.File, ".cpp") {
 			return cmd.File
 		}
 	}
-	
+
 	// If no implementation files found, just use the first file
 	if len(commands) > 0 {
 		return commands[0].File
 	}
-	
+
 	return ""
 }
 
@@ -688,6 +701,32 @@ func ReadFileLines(path string, startLine, endLine int) ([]string, error) {
 	}
 
 	return lines, scanner.Err()
+}
+
+// parseClangdLogs reads clangd's stderr and logs it with appropriate levels
+func (c *ClangdClient) parseClangdLogs(stderr io.Reader) {
+	scanner := bufio.NewScanner(stderr)
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		// Parse clangd log levels
+		// V[timestamp] = verbose/debug
+		// I[timestamp] = info
+		// E[timestamp] = error
+		if len(line) > 0 {
+			switch line[0] {
+			case 'V':
+				c.logger.Debug("[CLANGD] %s", line)
+			case 'I':
+				c.logger.Info("[CLANGD] %s", line)
+			case 'E':
+				c.logger.Error("[CLANGD] %s", line)
+			default:
+				// Unknown format, log as info
+				c.logger.Info("[CLANGD] %s", line)
+			}
+		}
+	}
 }
 
 // getLanguageID returns the language ID for a file

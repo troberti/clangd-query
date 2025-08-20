@@ -1,20 +1,19 @@
 package commands
 
 import (
-	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/firi/clangd-query/internal/lsp"
+	"clangd-query/internal/logger"
+	"clangd-query/internal/lsp"
 )
 
 // Search performs a workspace-wide symbol search
-func Search(client *lsp.ClangdClient, query string, limit int) ([]SearchResult, error) {
+func Search(client *lsp.ClangdClient, query string, limit int, log logger.Logger) ([]SearchResult, error) {
 	// Check for common regex patterns that users mistakenly use
 	if strings.Contains(query, " ") {
-		fmt.Fprintf(os.Stderr, "Warning: Query contains spaces. clangd uses fuzzy matching, not regex.\n")
-		fmt.Fprintf(os.Stderr, "Did you mean to search for multiple words? Try searching for each word separately.\n")
+		log.Info("Warning: Query contains spaces. clangd uses fuzzy matching, not regex.")
+		log.Info("Did you mean to search for multiple words? Try searching for each word separately.")
 	}
 
 	// Perform workspace symbol search

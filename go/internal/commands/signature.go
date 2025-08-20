@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/firi/clangd-query/internal/lsp"
+	"clangd-query/internal/logger"
+	"clangd-query/internal/lsp"
 )
 
 // Signature shows function signatures with documentation
-func Signature(client *lsp.ClangdClient, input string) ([]SignatureResult, error) {
+func Signature(client *lsp.ClangdClient, input string, log logger.Logger) ([]SignatureResult, error) {
 	// Parse input
 	uri, position, err := parseLocationOrSymbol(client, input)
 	if err != nil {

@@ -4,11 +4,12 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/firi/clangd-query/internal/lsp"
+	"clangd-query/internal/logger"
+	"clangd-query/internal/lsp"
 )
 
 // Interface extracts the public interface of a class/struct
-func Interface(client *lsp.ClangdClient, input string) (*InterfaceResult, error) {
+func Interface(client *lsp.ClangdClient, input string, log logger.Logger) (*InterfaceResult, error) {
 	// Parse input  
 	uri, position, err := parseLocationOrSymbol(client, input)
 	if err != nil {

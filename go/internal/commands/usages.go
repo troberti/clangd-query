@@ -5,11 +5,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/firi/clangd-query/internal/lsp"
+	"clangd-query/internal/logger"
+	"clangd-query/internal/lsp"
 )
 
 // Usages finds all references to a symbol
-func Usages(client *lsp.ClangdClient, input string, limit int) ([]UsageResult, error) {
+func Usages(client *lsp.ClangdClient, input string, limit int, log logger.Logger) ([]UsageResult, error) {
 	// Parse input
 	uri, position, err := parseLocationOrSymbol(client, input)
 	if err != nil {

@@ -1,13 +1,13 @@
 package daemon
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
+	"clangd-query/internal/logger"
 	"github.com/fsnotify/fsnotify"
 )
 
@@ -20,10 +20,11 @@ type FileWatcher struct {
 	debounceMu    sync.Mutex
 	changedFiles  map[string]bool
 	stop          chan struct{}
+	logger        logger.Logger
 }
 
 // NewFileWatcher creates a new file watcher
-func NewFileWatcher(projectRoot string, onChange func([]string)) (*FileWatcher, error) {
+func NewFileWatcher(projectRoot string, onChange func([]string), log logger.Logger) (*FileWatcher, error) {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return nil, err
@@ -35,6 +36,7 @@ func NewFileWatcher(projectRoot string, onChange func([]string)) (*FileWatcher, 
 		onChange:     onChange,
 		changedFiles: make(map[string]bool),
 		stop:         make(chan struct{}),
+		logger:       log,
 	}
 
 	// Add project root and subdirectories
@@ -72,7 +74,7 @@ func (fw *FileWatcher) addDirectoryRecursive(dir string) error {
 			// Add directory to watcher
 			if err := fw.watcher.Add(path); err != nil {
 				// Ignore errors adding individual directories
-				fmt.Fprintf(os.Stderr, "Warning: failed to watch %s: %v\n", path, err)
+				fw.logger.Info("Warning: failed to watch %s: %v", path, err)
 			}
 		}
 
@@ -107,7 +109,7 @@ func (fw *FileWatcher) watch() {
 			if !ok {
 				return
 			}
-			fmt.Fprintf(os.Stderr, "File watcher error: %v\n", err)
+			fw.logger.Error("File watcher error: %v", err)
 
 		case <-fw.stop:
 			return

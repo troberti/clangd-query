@@ -10,8 +10,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/firi/clangd-query/internal/commands"
-	"github.com/firi/clangd-query/internal/daemon"
+	"clangd-query/internal/commands"
+	"clangd-query/internal/daemon"
 )
 
 // Config contains client configuration
@@ -116,7 +116,11 @@ func startDaemon(projectRoot string, verbose bool) error {
 	}
 
 	// Start daemon as background process
-	cmd := exec.Command(execPath, "daemon", projectRoot)
+	args := []string{"daemon", projectRoot}
+	if verbose {
+		args = append(args, "--verbose")
+	}
+	cmd := exec.Command(execPath, args...)
 	
 	// Detach from current process group
 	cmd.SysProcAttr = &syscall.SysProcAttr{
@@ -162,6 +166,25 @@ func handleSpecialCommand(conn net.Conn, config *Config) error {
 	req := Request{
 		ID:     1,
 		Method: config.Command,
+		Params: make(map[string]interface{}),
+	}
+	
+	// For logs command, pass the log level
+	if config.Command == "logs" {
+		// Check for --verbose or --error in arguments
+		logLevel := "info" // default
+		for _, arg := range config.Arguments {
+			if arg == "--verbose" || arg == "-v" {
+				logLevel = "verbose"
+			} else if arg == "--error" || arg == "-e" {
+				logLevel = "error"
+			}
+		}
+		// Global verbose flag overrides
+		if config.Verbose {
+			logLevel = "verbose"
+		}
+		req.Params["level"] = logLevel
 	}
 
 	encoder := json.NewEncoder(conn)

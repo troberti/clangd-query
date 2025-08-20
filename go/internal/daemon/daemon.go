@@ -3,7 +3,6 @@ package daemon
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net"
 	"os"
 	"os/signal"
@@ -11,15 +10,22 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/firi/clangd-query/internal/commands"
-	"github.com/firi/clangd-query/internal/lsp"
+	"clangd-query/internal/commands"
+	"clangd-query/internal/logger"
+	"clangd-query/internal/lsp"
 )
+
+// Config contains daemon configuration
+type Config struct {
+	ProjectRoot string
+	Verbose     bool
+}
 
 // Daemon manages the clangd process and handles client connections
 type Daemon struct {
 	projectRoot   string
 	socketPath    string
-	logFile       *os.File
+	logger        logger.Logger
 	clangdClient  *lsp.ClangdClient
 	fileWatcher   *FileWatcher
 	listener      net.Listener
@@ -53,22 +59,26 @@ type ErrorResponse struct {
 }
 
 // Run starts the daemon
-func Run(projectRoot string) {
+func Run(config *Config) {
 	daemon := &Daemon{
-		projectRoot: projectRoot,
-		socketPath:  GetSocketPath(projectRoot),
+		projectRoot: config.ProjectRoot,
+		socketPath:  GetSocketPath(config.ProjectRoot),
 		shutdown:    make(chan struct{}),
 		startTime:   time.Now(),
 	}
 
-	// Setup logging
-	if err := daemon.setupLogging(); err != nil {
+	// Setup logging with config
+	if err := daemon.setupLogging(config.Verbose); err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to setup logging: %v\n", err)
 		os.Exit(1)
 	}
-	defer daemon.logFile.Close()
+	defer func() {
+		if fileLogger, ok := daemon.logger.(*logger.FileLogger); ok {
+			fileLogger.Close()
+		}
+	}()
 
-	daemon.log("Starting daemon for project: %s", projectRoot)
+	daemon.log("Starting daemon for project: %s", config.ProjectRoot)
 
 	// Check for existing daemon
 	if err := daemon.checkExistingDaemon(); err != nil {
@@ -77,14 +87,14 @@ func Run(projectRoot string) {
 	}
 
 	// Write lock file
-	if err := WriteLockFile(projectRoot, os.Getpid(), daemon.socketPath); err != nil {
+	if err := WriteLockFile(config.ProjectRoot, os.Getpid(), daemon.socketPath); err != nil {
 		daemon.log("Failed to write lock file: %v", err)
 		os.Exit(1)
 	}
-	defer RemoveLockFile(projectRoot)
+	defer RemoveLockFile(config.ProjectRoot)
 
 	// Ensure compilation database exists
-	buildDir, err := EnsureCompilationDatabase(projectRoot)
+	buildDir, err := EnsureCompilationDatabase(config.ProjectRoot, daemon.logger)
 	if err != nil {
 		daemon.log("Failed to ensure compilation database: %v", err)
 		os.Exit(1)
@@ -92,7 +102,7 @@ func Run(projectRoot string) {
 
 	// Start clangd
 	daemon.log("Starting clangd with build directory: %s", buildDir)
-	daemon.clangdClient, err = lsp.NewClangdClient(projectRoot, buildDir)
+	daemon.clangdClient, err = lsp.NewClangdClient(config.ProjectRoot, buildDir, daemon.logger)
 	if err != nil {
 		daemon.log("Failed to start clangd: %v", err)
 		os.Exit(1)
@@ -100,7 +110,7 @@ func Run(projectRoot string) {
 	defer daemon.clangdClient.Stop()
 
 	// Setup file watcher
-	daemon.fileWatcher, err = NewFileWatcher(projectRoot, daemon.onFilesChanged)
+	daemon.fileWatcher, err = NewFileWatcher(config.ProjectRoot, daemon.onFilesChanged, daemon.logger)
 	if err != nil {
 		daemon.log("Failed to setup file watcher: %v", err)
 		// Continue without file watching
@@ -128,28 +138,27 @@ func Run(projectRoot string) {
 	daemon.log("Daemon shutting down")
 }
 
-func (d *Daemon) setupLogging() error {
-	// Truncate log if too large (10MB)
-	if err := TruncateLogFile(d.projectRoot, 10*1024*1024); err != nil {
-		return err
-	}
-
+func (d *Daemon) setupLogging(verbose bool) error {
 	logPath := GetLogPath(d.projectRoot)
-	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	
+	// Determine file log level based on verbose flag
+	fileLogLevel := logger.LevelInfo
+	if verbose {
+		fileLogLevel = logger.LevelDebug
+	}
+	
+	// Create file logger
+	fileLogger, err := logger.NewFileLogger(logPath, fileLogLevel)
 	if err != nil {
 		return err
 	}
-
-	d.logFile = logFile
-	log.SetOutput(logFile)
+	
+	d.logger = fileLogger
 	return nil
 }
 
 func (d *Daemon) log(format string, args ...interface{}) {
-	timestamp := time.Now().Format("2006-01-02 15:04:05.000")
-	message := fmt.Sprintf(format, args...)
-	fmt.Fprintf(d.logFile, "[%s] %s\n", timestamp, message)
-	d.logFile.Sync()
+	d.logger.Info(format, args...)
 }
 
 func (d *Daemon) checkExistingDaemon() error {
@@ -318,7 +327,7 @@ func (d *Daemon) handleRequest(req Request) (json.RawMessage, error) {
 	case "status":
 		return d.handleStatus()
 	case "logs":
-		return d.handleLogs()
+		return d.handleLogs(req)
 	case "shutdown":
 		go func() {
 			time.Sleep(100 * time.Millisecond)
@@ -349,17 +358,23 @@ func (d *Daemon) handleStatus() (json.RawMessage, error) {
 	return json.Marshal(status)
 }
 
-func (d *Daemon) handleLogs() (json.RawMessage, error) {
-	logPath := GetLogPath(d.projectRoot)
-	
-	// Read last 100 lines of log file
-	content, err := os.ReadFile(logPath)
-	if err != nil {
-		return nil, err
+func (d *Daemon) handleLogs(req Request) (json.RawMessage, error) {
+	// Get log level from params (default to INFO and above)
+	minLevel := logger.LevelInfo
+	if level, ok := req.Params["level"].(string); ok {
+		switch level {
+		case "error":
+			minLevel = logger.LevelError
+		case "verbose", "debug":
+			minLevel = logger.LevelDebug
+		default:
+			minLevel = logger.LevelInfo
+		}
 	}
-
-	// TODO: Implement tail logic to get last N lines
-	return json.Marshal(map[string]string{"logs": string(content)})
+	
+	// Get filtered logs from memory
+	logs := d.logger.GetLogs(minLevel)
+	return json.Marshal(map[string]string{"logs": logs})
 }
 
 func (d *Daemon) forwardToClangd(req Request) (json.RawMessage, error) {
@@ -381,7 +396,7 @@ func (d *Daemon) forwardToClangd(req Request) (json.RawMessage, error) {
 		}
 		queryStr := fmt.Sprintf("%v", query[0])
 		
-		results, err := commands.Search(d.clangdClient, queryStr, limit)
+		results, err := commands.Search(d.clangdClient, queryStr, limit, d.logger)
 		if err != nil {
 			return nil, err
 		}
@@ -394,7 +409,7 @@ func (d *Daemon) forwardToClangd(req Request) (json.RawMessage, error) {
 		}
 		input := fmt.Sprintf("%v", args[0])
 		
-		results, err := commands.Show(d.clangdClient, input)
+		results, err := commands.Show(d.clangdClient, input, d.logger)
 		if err != nil {
 			return nil, err
 		}
@@ -407,7 +422,7 @@ func (d *Daemon) forwardToClangd(req Request) (json.RawMessage, error) {
 		}
 		input := fmt.Sprintf("%v", args[0])
 		
-		result, err := commands.View(d.clangdClient, input)
+		result, err := commands.View(d.clangdClient, input, d.logger)
 		if err != nil {
 			return nil, err
 		}
@@ -420,7 +435,7 @@ func (d *Daemon) forwardToClangd(req Request) (json.RawMessage, error) {
 		}
 		input := fmt.Sprintf("%v", args[0])
 		
-		results, err := commands.Usages(d.clangdClient, input, limit)
+		results, err := commands.Usages(d.clangdClient, input, limit, d.logger)
 		if err != nil {
 			return nil, err
 		}
@@ -433,7 +448,7 @@ func (d *Daemon) forwardToClangd(req Request) (json.RawMessage, error) {
 		}
 		input := fmt.Sprintf("%v", args[0])
 		
-		result, err := commands.Hierarchy(d.clangdClient, input, limit)
+		result, err := commands.Hierarchy(d.clangdClient, input, limit, d.logger)
 		if err != nil {
 			return nil, err
 		}
@@ -446,7 +461,7 @@ func (d *Daemon) forwardToClangd(req Request) (json.RawMessage, error) {
 		}
 		input := fmt.Sprintf("%v", args[0])
 		
-		results, err := commands.Signature(d.clangdClient, input)
+		results, err := commands.Signature(d.clangdClient, input, d.logger)
 		if err != nil {
 			return nil, err
 		}
@@ -459,7 +474,7 @@ func (d *Daemon) forwardToClangd(req Request) (json.RawMessage, error) {
 		}
 		input := fmt.Sprintf("%v", args[0])
 		
-		result, err := commands.Interface(d.clangdClient, input)
+		result, err := commands.Interface(d.clangdClient, input, d.logger)
 		if err != nil {
 			return nil, err
 		}

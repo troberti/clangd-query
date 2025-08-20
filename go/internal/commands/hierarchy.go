@@ -4,11 +4,12 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/firi/clangd-query/internal/lsp"
+	"clangd-query/internal/logger"
+	"clangd-query/internal/lsp"
 )
 
 // Hierarchy shows the type hierarchy of a class/struct
-func Hierarchy(client *lsp.ClangdClient, input string, limit int) (*HierarchyResult, error) {
+func Hierarchy(client *lsp.ClangdClient, input string, limit int, log logger.Logger) (*HierarchyResult, error) {
 	// Parse input
 	uri, position, err := parseLocationOrSymbol(client, input)
 	if err != nil {

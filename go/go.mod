@@ -1,4 +1,4 @@
-module github.com/firi/clangd-query
+module clangd-query
 
 go 1.25.0
 
