@@ -22,18 +22,18 @@ type LockInfo struct {
 // GetSocketPath returns the socket path for a project
 func GetSocketPath(projectRoot string) string {
 	hash := md5.Sum([]byte(projectRoot))
-	socketName := fmt.Sprintf("clangd-query-%x.sock", hash)
+	socketName := fmt.Sprintf("clangd-query-go-%x.sock", hash)
 	return filepath.Join(os.TempDir(), socketName)
 }
 
 // GetLockPath returns the lock file path for a project
 func GetLockPath(projectRoot string) string {
-	return filepath.Join(projectRoot, ".clangd-query.lock")
+	return filepath.Join(projectRoot, ".clangd-query-go.lock")
 }
 
 // GetLogPath returns the log file path for a project
 func GetLogPath(projectRoot string) string {
-	cacheDir := filepath.Join(projectRoot, ".cache", "clangd-query")
+	cacheDir := filepath.Join(projectRoot, ".cache", "clangd-query-go")
 	os.MkdirAll(cacheDir, 0755)
 	return filepath.Join(cacheDir, "daemon.log")
 }
