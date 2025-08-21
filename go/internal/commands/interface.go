@@ -20,7 +20,7 @@ func Interface(client *lsp.ClangdClient, input string, log logger.Logger) (strin
 	if len(symbols) == 0 {
 		// Provide a helpful message when symbol is not found
 		log.Info("No symbols found matching: %s", input)
-		return fmt.Sprintf("No class or struct found matching '%s'\n\nTip: Make sure the symbol name is spelled correctly.", input), nil
+		return fmt.Sprintf("No class or struct named '%s' found", input), nil
 	}
 
 	// Use the best match - symbols are already sorted by relevance from clangd
@@ -104,7 +104,12 @@ func Interface(client *lsp.ClangdClient, input string, log logger.Logger) (strin
 		}
 	}
 
-	output.WriteString(fmt.Sprintf("class %s - %s\n\n", fullName, location))
+	// Use the correct keyword (class or struct)
+	symbolTypeKeyword := "class"
+	if targetSymbol.Kind == lsp.SymbolKindStruct {
+		symbolTypeKeyword = "struct"
+	}
+	output.WriteString(fmt.Sprintf("%s %s - %s\n\n", symbolTypeKeyword, fullName, location))
 	output.WriteString("Public Interface:\n\n")
 
 	publicMembersFound := false
@@ -128,24 +133,15 @@ func Interface(client *lsp.ClangdClient, input string, log logger.Logger) (strin
 			// Fallback to symbol name and detail
 			signature = formatSymbolSignature(&child)
 		}
-
-		// For template methods, we need special handling
-		// The signature might be just "template <typename T>" without the method signature
-		if strings.HasPrefix(signature, "template") && !strings.Contains(signature, "(") {
-			// Try to get the full signature from child.Detail
-			// Detail looks like: "template std::optional<std::shared_ptr<T>> () const"
-			if child.Detail != "" && strings.HasPrefix(child.Detail, "template") {
-				// Extract the return type and parameters from detail
-				detailParts := strings.TrimPrefix(child.Detail, "template ")
-				// Combine with method name
-				signature = fmt.Sprintf("template <typename T>\n%s %s", detailParts, child.Name)
-				// Clean up extra spaces and parentheses
-				signature = strings.ReplaceAll(signature, " ()", "()")
-				signature = strings.ReplaceAll(signature, "() const "+child.Name, child.Name+"() const")
-				// Handle the specific case of GetComponent
-				if child.Name == "GetComponent" && strings.Contains(signature, "std::optional") {
-					signature = "template <typename T>\nstd::optional<std::shared_ptr<T>> GetComponent() const"
+		
+		// Prepend static if it's a static method
+		for _, modifier := range doc.Modifiers {
+			if modifier == "static" {
+				// Check if signature already contains static
+				if !strings.Contains(signature, "static ") {
+					signature = "static " + signature
 				}
+				break
 			}
 		}
 

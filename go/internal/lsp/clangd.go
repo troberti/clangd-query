@@ -757,7 +757,7 @@ func (c *ClangdClient) GetDocumentation(uri string, position Position) (*ParsedD
 	// Log the raw hover content for debugging
 	c.logger.Debug("Raw hover content:\n%s", hover.Contents.Value)
 	
-	parsed := c.parseDocumentation(hover.Contents.Value)
+	parsed := parseDocumentation(hover.Contents.Value)
 	
 	// Log what we parsed
 	c.logger.Debug("Parsed: AccessLevel='%s', Signature='%s', ReturnType='%s'", 
@@ -766,8 +766,12 @@ func (c *ClangdClient) GetDocumentation(uri string, position Position) (*ParsedD
 	return parsed, nil
 }
 
-// parseDocumentation parses hover content into structured documentation
-func (c *ClangdClient) parseDocumentation(content string) *ParsedDocumentation {
+// parseDocumentation parses hover content from clangd into structured documentation.
+// This function extracts various pieces of information from the markdown-formatted
+// hover response, including signatures, return types, parameters, modifiers, and
+// documentation text. It handles various C++ constructs like templates, constructors,
+// destructors, and different access levels.
+func parseDocumentation(content string) *ParsedDocumentation {
 	doc := &ParsedDocumentation{
 		raw: content,
 	}
@@ -804,13 +808,29 @@ func (c *ClangdClient) parseDocumentation(content string) *ParsedDocumentation {
 			// Check for access level on its own line
 			if line == "public:" || line == "private:" || line == "protected:" {
 				doc.AccessLevel = strings.TrimSuffix(line, ":")
-				// The next non-empty line should be the signature
+				// The next non-empty line(s) should be the signature
+				// For templates, this might span multiple lines
 				for j := i + 1; j < len(lines); j++ {
 					nextLine := strings.TrimSpace(lines[j])
 					if nextLine != "" && !strings.HasPrefix(nextLine, "// ") {
-						doc.Signature = nextLine
-						// Extract modifiers and other info from the signature
-						extractSignatureDetails(nextLine, doc)
+						// Check if this is a template declaration
+						if strings.HasPrefix(nextLine, "template") && strings.HasSuffix(nextLine, ">") {
+							// This is a template, look for the actual method signature on the next line
+							for k := j + 1; k < len(lines); k++ {
+								methodLine := strings.TrimSpace(lines[k])
+								if methodLine != "" && !strings.HasPrefix(methodLine, "// ") {
+									// Combine template and method signature
+									doc.Signature = nextLine + "\n" + formatSignature(methodLine)
+									// Extract modifiers and other info from the method signature part
+									extractSignatureDetails(methodLine, doc)
+									break
+								}
+							}
+						} else {
+							doc.Signature = formatSignature(nextLine)
+							// Extract modifiers and other info from the signature
+							extractSignatureDetails(nextLine, doc)
+						}
 						break
 					}
 				}
@@ -841,9 +861,24 @@ func (c *ClangdClient) parseDocumentation(content string) *ParsedDocumentation {
 					signatureLine = strings.TrimPrefix(line, "protected: ")
 				}
 				
-				doc.Signature = signatureLine
-				// Extract modifiers and other info from the signature
-				extractSignatureDetails(signatureLine, doc)
+				// Check if this is a template declaration
+				if strings.HasPrefix(signatureLine, "template") && strings.HasSuffix(signatureLine, ">") {
+					// This is a template, look for the actual method signature on the next line
+					for j := i + 1; j < len(lines); j++ {
+						methodLine := strings.TrimSpace(lines[j])
+						if methodLine != "" && !strings.HasPrefix(methodLine, "// ") {
+							// Combine template and method signature
+							doc.Signature = signatureLine + "\n" + formatSignature(methodLine)
+							// Extract modifiers and other info from the method signature part
+							extractSignatureDetails(methodLine, doc)
+							break
+						}
+					}
+				} else {
+					doc.Signature = formatSignature(signatureLine)
+					// Extract modifiers and other info from the signature
+					extractSignatureDetails(signatureLine, doc)
+				}
 			}
 		}
 	}
@@ -872,9 +907,15 @@ func (c *ClangdClient) parseDocumentation(content string) *ParsedDocumentation {
 			continue
 		}
 		
-		// Skip technical details
-		if strings.HasPrefix(line, "Type:") ||
-		   strings.HasPrefix(line, "Size:") ||
+		// Extract Type field for variables/fields
+		if strings.HasPrefix(line, "Type:") {
+			typeStr := strings.TrimSpace(strings.TrimPrefix(line, "Type:"))
+			doc.Type = strings.Trim(typeStr, "`")
+			continue
+		}
+		
+		// Skip other technical details
+		if strings.HasPrefix(line, "Size:") ||
 		   strings.HasPrefix(line, "Offset:") ||
 		   strings.Contains(line, "alignment") {
 			continue
@@ -985,13 +1026,45 @@ func extractSignatureDetails(signature string, doc *ParsedDocumentation) {
 	if strings.Contains(signature, "(") {
 		parenIdx := strings.Index(signature, "(")
 		beforeParen := signature[:parenIdx]
-		parts := strings.Fields(beforeParen)
 		
-		// Skip known modifiers and class qualifiers to find return type
-		for _, part := range parts {
-			if !isModifier(part) && !strings.Contains(part, "::") {
-				doc.ReturnType = part
-				break
+		// Check if this is a constructor or destructor (they don't have return types)
+		// Constructors/destructors contain the class name right before the parenthesis
+		// and don't have a separate return type
+		parts := strings.Fields(beforeParen)
+		isConstructorOrDestructor := false
+		
+		// Check for destructor (starts with ~) or constructor (class name before parenthesis)
+		if len(parts) > 0 {
+			lastPart := parts[len(parts)-1]
+			// Check if it's a destructor
+			if strings.HasPrefix(lastPart, "~") {
+				isConstructorOrDestructor = true
+			} else {
+				// Check if it's a constructor by looking for known constructor patterns
+				// Constructor names typically appear after "explicit" or as the last identifier
+				for _, part := range parts {
+					if part == "explicit" || part == lastPart && !isModifier(part) && !strings.Contains(part, "::") {
+						// Check if the name matches a typical constructor pattern
+						// (starts with uppercase letter, which is common for class names)
+						if len(lastPart) > 0 && lastPart[0] >= 'A' && lastPart[0] <= 'Z' {
+							isConstructorOrDestructor = true
+							break
+						}
+					}
+				}
+			}
+		}
+		
+		// Only extract return type if it's not a constructor/destructor
+		// and if ReturnType hasn't already been set (e.g., from the → line)
+		if !isConstructorOrDestructor && doc.ReturnType == "" {
+			// Skip known modifiers and class qualifiers to find return type
+			for _, part := range parts {
+				if !isModifier(part) && !strings.Contains(part, "::") {
+					// Don't set return type if it looks like a method/function name
+					// (We already have the return type from the → line in most cases)
+					break
+				}
 			}
 		}
 		
@@ -999,12 +1072,64 @@ func extractSignatureDetails(signature string, doc *ParsedDocumentation) {
 		if closeIdx := strings.Index(signature[parenIdx:], ")"); closeIdx > 0 {
 			paramStr := signature[parenIdx+1 : parenIdx+closeIdx]
 			if paramStr != "" && paramStr != "void" {
-				params := strings.Split(paramStr, ",")
-				doc.ParametersText = "Parameters:"
-				for _, param := range params {
-					doc.ParametersText += "\n  - `" + strings.TrimSpace(param) + "`"
+				// Only set ParametersText if it hasn't been set already
+				if doc.ParametersText == "" {
+					params := strings.Split(paramStr, ",")
+					doc.ParametersText = "Parameters:"
+					for _, param := range params {
+						doc.ParametersText += "\n  - `" + strings.TrimSpace(param) + "`"
+					}
 				}
 			}
 		}
 	}
+}
+
+// formatSignature normalizes the formatting of a C++ signature by ensuring that
+// reference (&) and pointer (*) symbols are placed next to the type rather than
+// the variable or function name. This provides consistent formatting that matches
+// C++ style conventions where these symbols are part of the type specification.
+func formatSignature(signature string) string {
+	// Handle the case where signature might be multiline (e.g., template on one line, method on next)
+	if strings.Contains(signature, "\n") {
+		return signature // Keep multiline signatures as-is for now
+	}
+	
+	// First, normalize spaces around & and *
+	// Replace patterns like "Type &" with "Type&" and "Type *" with "Type*"
+	result := signature
+	
+	// Handle references - move & next to the type but keep space after for names
+	result = strings.ReplaceAll(result, " &", "&")
+	
+	// Handle pointers - move * next to the type but keep space after for names
+	result = strings.ReplaceAll(result, " *", "*")
+	
+	// Now we need to ensure there's a space between Type& and the next identifier
+	// We'll process the signature to add spaces where needed
+	finalResult := ""
+	i := 0
+	for i < len(result) {
+		if i < len(result)-1 && (result[i] == '&' || result[i] == '*') {
+			// Add the & or *
+			finalResult += string(result[i])
+			i++
+			// Check if the next character is alphanumeric (part of an identifier)
+			// If so, add a space before it
+			if i < len(result) && isIdentifierChar(result[i]) {
+				finalResult += " "
+			}
+		} else {
+			finalResult += string(result[i])
+			i++
+		}
+	}
+	
+	return finalResult
+}
+
+// isIdentifierChar checks if a character can be part of a C++ identifier
+func isIdentifierChar(ch byte) bool {
+	return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || 
+	       (ch >= '0' && ch <= '9') || ch == '_'
 }

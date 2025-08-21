@@ -22,8 +22,11 @@ export GOROOT=
 cd go
 if [ -n "$TEST_FILTER" ]; then
     echo "Running: $TEST_FILTER"
+    # Run tests in both test directories
     go test -v ./test -run "$TEST_FILTER"
+    go test -v ./internal/lsp -run "$TEST_FILTER"
 else
     echo "Running all tests"
-    go test -v ./test
+    # Run tests in both test directories
+    go test -v ./test ./internal/lsp
 fi
