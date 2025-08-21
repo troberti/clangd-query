@@ -75,6 +75,23 @@ type TestContext struct {
 }
 ```
 
+Try to avoid comments like this where the class or function name is the start
+of the sentence. It just reads awkward.
+```go
+// TestComplexRealWorldExamples tests complex real-world hover responses
+func TestComplexRealWorldExamples(t *testing.T) {
+  ...  // ^^ BAD
+}
+```
+Instead write it like this:
+```go
+// Tests complex real-world hover responses
+func TestComplexRealWorldExamples(t *testing.T) {
+  ...  // ^^ GOOD
+}
+```
+
+
 ### Avoid Terse Comments
 Don't write minimal comments like:
 ```go
@@ -140,3 +157,8 @@ database. Use `./test-old.sh` to use the old Typescript version.
 Use `./compare.sh` to run both versions and compare their output.
 
 ONLY use these tools when developing.
+
+## Testing
+
+Run `./run_tests.sh` to run all Go tests. To run a specific test, add a
+filter argument, like `./run_test.sh TestInterfaceCommand`.
