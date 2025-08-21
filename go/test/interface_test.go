@@ -5,11 +5,7 @@ import (
 )
 
 func TestInterfaceCommand(t *testing.T) {
-	tc := NewTestContext(t)
-
-	// Ensure daemon is ready before running tests
-	t.Log("Waiting for daemon to be ready...")
-	tc.WaitForDaemonReady()
+	tc := GetTestContext(t)
 
 	t.Run("Get interface of GameObject class", func(t *testing.T) {
 		result := tc.RunCommand("interface", "GameObject")

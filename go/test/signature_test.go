@@ -5,11 +5,7 @@ import (
 )
 
 func TestSignatureCommand(t *testing.T) {
-	tc := NewTestContext(t)
-
-	// Ensure daemon is ready before running tests
-	t.Log("Waiting for daemon to be ready...")
-	tc.WaitForDaemonReady()
+	tc := GetTestContext(t)
 
 	t.Run("Get signature of GameObject constructor", func(t *testing.T) {
 		result := tc.RunCommand("signature", "GameObject")

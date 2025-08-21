@@ -5,11 +5,7 @@ import (
 )
 
 func TestHierarchyCommand(t *testing.T) {
-	tc := NewTestContext(t)
-	
-	// Ensure daemon is ready before running tests
-	t.Log("Waiting for daemon to be ready...")
-	tc.WaitForDaemonReady()
+	tc := GetTestContext(t)
 	
 	t.Run("View hierarchy of Character derived class", func(t *testing.T) {
 		result := tc.RunCommand("hierarchy", "Character")

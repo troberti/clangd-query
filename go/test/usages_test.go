@@ -6,11 +6,7 @@ import (
 )
 
 func TestUsagesCommand(t *testing.T) {
-	tc := NewTestContext(t)
-	
-	// Ensure daemon is ready before running tests
-	t.Log("Waiting for daemon to be ready...")
-	tc.WaitForDaemonReady()
+	tc := GetTestContext(t)
 	
 	t.Run("Find usages of GameObject class", func(t *testing.T) {
 		result := tc.RunCommand("usages", "GameObject")

@@ -2,10 +2,7 @@ package test
 
 import (
 	"bytes"
-	"os"
 	"os/exec"
-	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -25,37 +22,26 @@ type TestContext struct {
 	T *testing.T
 }
 
-// NewTestContext creates a new test context with proper paths set up.
-// It determines the paths relative to the test file location and ensures
-// the binary exists before tests run.
-func NewTestContext(t *testing.T) *TestContext {
-	_, filename, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("Failed to get current file path")
+// globalTestContext is the shared test context used by all tests.
+// It is initialized once in TestMain and the daemon is kept running
+// for the entire test suite.
+var globalTestContext *TestContext
+
+
+
+// GetTestContext returns the global test context for use in tests.
+// The returned context has its T field set to the current test.
+func GetTestContext(t *testing.T) *TestContext {
+	if globalTestContext == nil {
+		t.Fatal("Global test context not initialized. This should not happen.")
 	}
 	
-	// test_helpers.go is in go/test/, we need to go up to project root
-	testDir := filepath.Dir(filename)
-	goDir := filepath.Dir(testDir)
-	projectRoot := filepath.Dir(goDir)
-	
-	tc := &TestContext{
-		BinaryPath:        filepath.Join(projectRoot, "bin", "clangd-query"),
-		SampleProjectPath: filepath.Join(projectRoot, "test", "fixtures", "sample-project"),
+	// Create a shallow copy with the current test's T
+	return &TestContext{
+		BinaryPath:        globalTestContext.BinaryPath,
+		SampleProjectPath: globalTestContext.SampleProjectPath,
 		T:                 t,
 	}
-	
-	// Verify the binary exists
-	if _, err := os.Stat(tc.BinaryPath); os.IsNotExist(err) {
-		t.Fatalf("clangd-query binary not found at %s. Run ./build.sh first.", tc.BinaryPath)
-	}
-	
-	// Verify the sample project exists
-	if _, err := os.Stat(tc.SampleProjectPath); os.IsNotExist(err) {
-		t.Fatalf("Sample project not found at %s", tc.SampleProjectPath)
-	}
-	
-	return tc
 }
 
 // CommandResult holds the output from running a clangd-query command.
@@ -115,16 +101,6 @@ func (tc *TestContext) RunCommand(args ...string) *CommandResult {
 	}
 }
 
-// WaitForDaemonReady ensures the daemon is ready by running a status command.
-// This is important for the first test to ensure the daemon has started and
-// indexed the codebase before running actual test commands.
-func (tc *TestContext) WaitForDaemonReady() {
-	// Give the daemon extra time to start up and index
-	result := tc.RunCommandWithTimeout([]string{"status"}, 60*time.Second)
-	if result.ExitCode != 0 {
-		tc.T.Fatalf("Daemon not ready: %s", result.Stderr)
-	}
-}
 
 // RunCommandWithTimeout is like RunCommand but allows specifying a custom timeout.
 // This is useful for commands that may take longer, like initial daemon startup.
