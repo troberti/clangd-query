@@ -334,12 +334,44 @@ func (d *Daemon) handleRequest(req Request) (json.RawMessage, error) {
 			close(d.shutdown)
 		}()
 		return json.Marshal(map[string]string{"status": "shutting down"})
-	case "search", "show", "view", "usages", "hierarchy", "signature", "interface":
-		// These will be forwarded to clangd
-		return d.forwardToClangd(req)
+	}
+
+	// All other commands go to clangd
+	input, _ := req.Params["symbol"].(string)
+	
+	limit := -1
+	if l, ok := req.Params["limit"].(float64); ok {
+		limit = int(l)
+	}
+
+	var output string
+	var err error
+	
+	switch req.Method {
+	case "search":
+		output, err = commands.Search(d.clangdClient, input, limit, d.logger)
+	case "show":
+		output, err = commands.Show(d.clangdClient, input, d.logger)
+	case "view":
+		output, err = commands.View(d.clangdClient, input, d.logger)
+	case "usages":
+		output, err = commands.Usages(d.clangdClient, input, limit, d.logger)
+	case "hierarchy":
+		output, err = commands.Hierarchy(d.clangdClient, input, limit, d.logger)
+	case "signature":
+		output, err = commands.Signature(d.clangdClient, input, d.logger)
+	case "interface":
+		output, err = commands.Interface(d.clangdClient, input, d.logger)
 	default:
 		return nil, fmt.Errorf("unknown method: %s", req.Method)
 	}
+
+	if err != nil {
+		d.logger.Error("%s failed: %v", req.Method, err)
+		return nil, err
+	}
+
+	return json.Marshal(map[string]string{"output": output})
 }
 
 func (d *Daemon) handleStatus() (json.RawMessage, error) {
@@ -371,132 +403,16 @@ func (d *Daemon) handleLogs(req Request) (json.RawMessage, error) {
 			minLevel = logger.LevelInfo
 		}
 	}
-	
+
 	// Get filtered logs from memory
 	logs := d.logger.GetLogs(minLevel)
 	return json.Marshal(map[string]string{"logs": logs})
 }
 
-func (d *Daemon) forwardToClangd(req Request) (json.RawMessage, error) {
-	// Extract parameters
-	params := req.Params
-	
-	// Get common parameters
-	limit := -1
-	if l, ok := params["limit"].(float64); ok {
-		limit = int(l)
-	}
-	
-	// Handle each command based on method
-	switch req.Method {
-	case "search":
-		query, _ := params["query"].(string)
-		if query == "" {
-			d.logger.Error("search command called without query parameter")
-			return nil, fmt.Errorf("search requires a query parameter")
-		}
-		
-		result, err := commands.Search(d.clangdClient, query, limit, d.logger)
-		if err != nil {
-			d.logger.Error("search command failed: %v", err)
-			return nil, err
-		}
-		// Return the formatted string wrapped in JSON
-		return json.Marshal(map[string]string{"output": result})
-		
-	case "show":
-		symbol, _ := params["symbol"].(string)
-		if symbol == "" {
-			d.logger.Error("show command called without symbol parameter")
-			return nil, fmt.Errorf("show requires a symbol parameter")
-		}
-		
-		result, err := commands.Show(d.clangdClient, symbol, d.logger)
-		if err != nil {
-			d.logger.Error("show command failed: %v", err)
-			return nil, err
-		}
-		return json.Marshal(map[string]string{"output": result})
-		
-	case "view":
-		symbol, _ := params["symbol"].(string)
-		if symbol == "" {
-			d.logger.Error("view command called without symbol parameter")
-			return nil, fmt.Errorf("view requires a symbol parameter")
-		}
-		
-		result, err := commands.View(d.clangdClient, symbol, d.logger)
-		if err != nil {
-			d.logger.Error("view command failed: %v", err)
-			return nil, err
-		}
-		return json.Marshal(map[string]string{"output": result})
-		
-	case "usages":
-		symbol, _ := params["symbol"].(string)
-		if symbol == "" {
-			d.logger.Error("usages command called without symbol parameter")
-			return nil, fmt.Errorf("usages requires a symbol parameter")
-		}
-		
-		result, err := commands.Usages(d.clangdClient, symbol, limit, d.logger)
-		if err != nil {
-			d.logger.Error("usages command failed: %v", err)
-			return nil, err
-		}
-		return json.Marshal(map[string]string{"output": result})
-		
-	case "hierarchy":
-		symbol, _ := params["symbol"].(string)
-		if symbol == "" {
-			d.logger.Error("hierarchy command called without symbol parameter")
-			return nil, fmt.Errorf("hierarchy requires a symbol parameter")
-		}
-		
-		result, err := commands.Hierarchy(d.clangdClient, symbol, limit, d.logger)
-		if err != nil {
-			d.logger.Error("hierarchy command failed: %v", err)
-			return nil, err
-		}
-		return json.Marshal(map[string]string{"output": result})
-		
-	case "signature":
-		symbol, _ := params["symbol"].(string)
-		if symbol == "" {
-			d.logger.Error("signature command called without symbol parameter")
-			return nil, fmt.Errorf("signature requires a symbol parameter")
-		}
-		
-		result, err := commands.Signature(d.clangdClient, symbol, d.logger)
-		if err != nil {
-			d.logger.Error("signature command failed: %v", err)
-			return nil, err
-		}
-		return json.Marshal(map[string]string{"output": result})
-		
-	case "interface":
-		symbol, _ := params["symbol"].(string)
-		if symbol == "" {
-			d.logger.Error("interface command called without symbol parameter")
-			return nil, fmt.Errorf("interface requires a symbol parameter")
-		}
-		
-		result, err := commands.Interface(d.clangdClient, symbol, d.logger)
-		if err != nil {
-			d.logger.Error("interface command failed: %v", err)
-			return nil, err
-		}
-		return json.Marshal(map[string]string{"output": result})
-		
-	default:
-		d.logger.Error("unknown command: %s", req.Method)
-		return nil, fmt.Errorf("unknown command: %s", req.Method)
-	}
-}
 
 func (d *Daemon) onFilesChanged(files []string) {
 	d.log("Files changed: %v", files)
-	
+
 	if d.clangdClient != nil {
 		// Notify clangd about file changes
 		d.clangdClient.OnFilesChanged(files)
