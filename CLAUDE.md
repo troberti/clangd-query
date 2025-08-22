@@ -40,12 +40,6 @@ Write comprehensive documentation for all Go code using proper prose, not terse 
 - Document assumptions, invariants, and important relationships between components
 - Use multiple paragraphs when needed to fully explain complex concepts
 
-### What to Document
-- **Types and Structs**: Start with a high-level description of what the type represents and its role in the system. Explain its lifecycle, usage patterns, and any important invariants.
-- **Fields**: Describe what the field stores, why it exists, when it's set, valid value ranges, and relationships to other fields. Avoid starting with the field name itself.
-- **Functions**: Explain the function's purpose, its parameters, return values, error conditions, side effects, and any concurrency considerations.
-- **Interfaces**: Document the contract that implementations must fulfill, including behavioral requirements beyond just method signatures.
-
 ### Example of Good Documentation
 ```go
 // Plain data struct to represents structured documentation extracted from clangd's hover response.
@@ -75,7 +69,7 @@ type TestContext struct {
 }
 ```
 
-Try to avoid comments like this where the class or function name is the start
+IMPORTANT: AVOID comments like this where the class or function name is the start
 of the sentence. It just reads awkward.
 ```go
 // TestComplexRealWorldExamples tests complex real-world hover responses
