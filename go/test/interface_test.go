@@ -61,7 +61,7 @@ func TestInterfaceCommand(t *testing.T) {
 	// Additional test: actual struct interface (Vector3)
 	t.Run("Get interface of Vector3 struct", func(t *testing.T) {
 		// TODO: The output still shows class instead struct.
-		t.Skip();
+		t.Skip()
 		result := tc.RunCommand("interface", "Vector3")
 		tc.AssertExitCode(result, 0)
 		// Should show public members of the struct

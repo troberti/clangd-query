@@ -35,15 +35,15 @@ type Logger interface {
 
 // FileLogger implements Logger with file output and in-memory storage
 type FileLogger struct {
-	file        *os.File
-	fileLevel   LogLevel      // Minimum level to write to file
-	mu          sync.Mutex
-	maxSize     int64
-	filePath    string
-	
+	file      *os.File
+	fileLevel LogLevel // Minimum level to write to file
+	mu        sync.Mutex
+	maxSize   int64
+	filePath  string
+
 	// In-memory storage for all logs
-	memoryLogs  []LogEntry
-	maxMemory   int           // Maximum number of entries to keep in memory
+	memoryLogs []LogEntry
+	maxMemory  int // Maximum number of entries to keep in memory
 }
 
 // NewFileLogger creates a new file logger
@@ -68,12 +68,12 @@ func NewFileLogger(logPath string, fileLevel LogLevel) (*FileLogger, error) {
 	}
 
 	return &FileLogger{
-		file:        file,
-		fileLevel:   fileLevel,
-		maxSize:     maxSize,
-		filePath:    logPath,
-		memoryLogs:  make([]LogEntry, 0, 10000),
-		maxMemory:   10000, // Keep last 10000 log entries in memory
+		file:       file,
+		fileLevel:  fileLevel,
+		maxSize:    maxSize,
+		filePath:   logPath,
+		memoryLogs: make([]LogEntry, 0, 10000),
+		maxMemory:  10000, // Keep last 10000 log entries in memory
 	}, nil
 }
 
@@ -105,7 +105,7 @@ func (l *FileLogger) log(level LogLevel, format string, args ...interface{}) {
 		case LevelDebug:
 			levelStr = "DEBUG"
 		}
-		formatted := fmt.Sprintf("[%s] [%s] %s\n", 
+		formatted := fmt.Sprintf("[%s] [%s] %s\n",
 			entry.Timestamp.Format("2006-01-02 15:04:05.000"),
 			levelStr,
 			entry.Message)
@@ -166,4 +166,4 @@ type NullLogger struct{}
 func (n *NullLogger) Error(format string, args ...interface{}) {}
 func (n *NullLogger) Info(format string, args ...interface{})  {}
 func (n *NullLogger) Debug(format string, args ...interface{}) {}
-func (n *NullLogger) GetLogs(minLevel LogLevel) string          { return "" }
+func (n *NullLogger) GetLogs(minLevel LogLevel) string         { return "" }

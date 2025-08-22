@@ -103,6 +103,12 @@ func GetValue() int
 - `internal/commands/` - Command implementations
 - `internal/logger/` - Logging interface and implementations
 
+## Code Formatting
+- All Go code MUST be formatted with `gofmt` before committing
+- Run `./format_go.sh` to automatically format all Go source files
+- The formatting script will tell you if any files were modified
+- This ensures consistent code style across the entire Go codebase
+
 ## CRITICAL: Working Directory Rules
 **YOU MUST ALWAYS STAY IN THE PROJECT ROOT DIRECTORY!**
 - NEVER use `cd` to change to subdirectories
@@ -122,6 +128,9 @@ func GetValue() int
 
 ## Common Commands for Testing
 ```bash
+# Format Go code before committing
+./format_go.sh
+
 # Build the project
 ./build.sh
 

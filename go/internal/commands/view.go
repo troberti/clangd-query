@@ -33,7 +33,7 @@ func View(client *lsp.ClangdClient, query string, log logger.Logger) (string, er
 
 	// Get the file path
 	filePath := client.PathFromFileURI(symbol.Location.URI)
-	
+
 	// Find the symbol line first
 	symbolLine := symbol.Location.Range.Start.Line
 
@@ -56,14 +56,14 @@ func View(client *lsp.ClangdClient, query string, log logger.Logger) (string, er
 	var startLine, endLine int
 	var foundRange *lsp.FoldingRange
 
-	// For classes/structs/enums/functions/methods, the folding range often starts 
+	// For classes/structs/enums/functions/methods, the folding range often starts
 	// at or after the declaration line (where the opening brace is).
-	if symbol.Kind == lsp.SymbolKindClass || 
-	   symbol.Kind == lsp.SymbolKindStruct || 
-	   symbol.Kind == lsp.SymbolKindEnum ||
-	   symbol.Kind == lsp.SymbolKindInterface ||
-	   symbol.Kind == lsp.SymbolKindFunction ||
-	   symbol.Kind == lsp.SymbolKindMethod {
+	if symbol.Kind == lsp.SymbolKindClass ||
+		symbol.Kind == lsp.SymbolKindStruct ||
+		symbol.Kind == lsp.SymbolKindEnum ||
+		symbol.Kind == lsp.SymbolKindInterface ||
+		symbol.Kind == lsp.SymbolKindFunction ||
+		symbol.Kind == lsp.SymbolKindMethod {
 
 		// Look for folding ranges near the symbol
 		var rangeAtSymbol *lsp.FoldingRange
@@ -83,8 +83,8 @@ func View(client *lsp.ClangdClient, query string, log logger.Logger) (string, er
 			for i := range foldingRanges {
 				r := &foldingRanges[i]
 				// Look for a range that starts at or within 1 line of where the first ends
-				if r.StartLine >= rangeAtSymbol.EndLine && 
-				   r.StartLine <= rangeAtSymbol.EndLine+1 {
+				if r.StartLine >= rangeAtSymbol.EndLine &&
+					r.StartLine <= rangeAtSymbol.EndLine+1 {
 					rangeAfterSymbol = r
 					break
 				}
@@ -124,8 +124,8 @@ func View(client *lsp.ClangdClient, query string, log logger.Logger) (string, er
 			r := &foldingRanges[i]
 			if r.StartLine <= symbolLine && symbolLine <= r.EndLine {
 				// This range contains our symbol
-				if foundRange == nil || 
-				   (r.EndLine-r.StartLine) < (foundRange.EndLine-foundRange.StartLine) {
+				if foundRange == nil ||
+					(r.EndLine-r.StartLine) < (foundRange.EndLine-foundRange.StartLine) {
 					foundRange = r
 				}
 			}
@@ -133,17 +133,17 @@ func View(client *lsp.ClangdClient, query string, log logger.Logger) (string, er
 	}
 
 	if foundRange != nil {
-		// For classes/structs/enums/functions/methods, we want to include the 
+		// For classes/structs/enums/functions/methods, we want to include the
 		// declaration line(s) too, not just the body
-		if symbol.Kind == lsp.SymbolKindClass || 
-		   symbol.Kind == lsp.SymbolKindStruct || 
-		   symbol.Kind == lsp.SymbolKindEnum ||
-		   symbol.Kind == lsp.SymbolKindInterface ||
-		   symbol.Kind == lsp.SymbolKindFunction ||
-		   symbol.Kind == lsp.SymbolKindMethod {
-			startLine = symbolLine  // Start from the declaration
-			endLine = foundRange.EndLine  // End at the closing brace
-			log.Debug("Using adjusted range for %s: %d-%d (symbol at %d, fold at %d-%d)", 
+		if symbol.Kind == lsp.SymbolKindClass ||
+			symbol.Kind == lsp.SymbolKindStruct ||
+			symbol.Kind == lsp.SymbolKindEnum ||
+			symbol.Kind == lsp.SymbolKindInterface ||
+			symbol.Kind == lsp.SymbolKindFunction ||
+			symbol.Kind == lsp.SymbolKindMethod {
+			startLine = symbolLine       // Start from the declaration
+			endLine = foundRange.EndLine // End at the closing brace
+			log.Debug("Using adjusted range for %s: %d-%d (symbol at %d, fold at %d-%d)",
 				SymbolKindToString(symbol.Kind), startLine, endLine, symbolLine, foundRange.StartLine, foundRange.EndLine)
 		} else {
 			startLine = foundRange.StartLine
@@ -157,7 +157,7 @@ func View(client *lsp.ClangdClient, query string, log logger.Logger) (string, er
 			targetLine := symbol.Location.Range.Start.Line
 
 			matchingSymbol := findSymbolAtPosition(docSymbols, targetLine, symbol.Name)
-			
+
 			if matchingSymbol != nil {
 				startLine = matchingSymbol.Range.Start.Line
 				endLine = matchingSymbol.Range.End.Line
@@ -175,10 +175,10 @@ func View(client *lsp.ClangdClient, query string, log logger.Logger) (string, er
 
 	// For classes/structs/enums, check for preceding comment blocks
 	commentStartLine := startLine
-	if symbol.Kind == lsp.SymbolKindClass || 
-	   symbol.Kind == lsp.SymbolKindStruct || 
-	   symbol.Kind == lsp.SymbolKindEnum ||
-	   symbol.Kind == lsp.SymbolKindInterface {
+	if symbol.Kind == lsp.SymbolKindClass ||
+		symbol.Kind == lsp.SymbolKindStruct ||
+		symbol.Kind == lsp.SymbolKindEnum ||
+		symbol.Kind == lsp.SymbolKindInterface {
 		// Look backwards from the symbol line to find comment blocks
 		inCommentBlock := false
 		for i := startLine - 1; i >= 0 && i >= startLine-50; i-- {
@@ -188,8 +188,8 @@ func View(client *lsp.ClangdClient, query string, log logger.Logger) (string, er
 			line := strings.TrimSpace(lines[i])
 
 			// Check if this line is part of a comment
-			if strings.HasPrefix(line, "//") || strings.HasPrefix(line, "/*") || 
-			   strings.HasPrefix(line, "*") || line == "*/" {
+			if strings.HasPrefix(line, "//") || strings.HasPrefix(line, "/*") ||
+				strings.HasPrefix(line, "*") || line == "*/" {
 				commentStartLine = i
 				inCommentBlock = true
 			} else if line == "" {
@@ -210,7 +210,7 @@ func View(client *lsp.ClangdClient, query string, log logger.Logger) (string, er
 
 	var codeLines []string
 	if commentStartLine <= endLine {
-		codeLines = lines[commentStartLine:endLine+1]
+		codeLines = lines[commentStartLine : endLine+1]
 	}
 
 	// Build the symbol description
@@ -229,7 +229,7 @@ func View(client *lsp.ClangdClient, query string, log logger.Logger) (string, er
 	}
 
 	// Build the result
-	result := fmt.Sprintf("Found %s at %s%s\n\n```cpp\n%s\n```", 
+	result := fmt.Sprintf("Found %s at %s%s\n\n```cpp\n%s\n```",
 		symbolDescription, formattedLocation, multipleMatchesNote, strings.Join(codeLines, "\n"))
 
 	log.Debug("Retrieved %d lines of source code", len(codeLines))

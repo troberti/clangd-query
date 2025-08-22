@@ -13,11 +13,11 @@ import (
 type TestContext struct {
 	// BinaryPath is the path to the clangd-query binary that will be tested.
 	BinaryPath string
-	
+
 	// SampleProjectPath is the path to the C++ test fixture project that
 	// provides a known codebase for testing clangd-query commands.
 	SampleProjectPath string
-	
+
 	// T is the testing context from Go's testing package.
 	T *testing.T
 }
@@ -27,15 +27,13 @@ type TestContext struct {
 // for the entire test suite.
 var globalTestContext *TestContext
 
-
-
 // GetTestContext returns the global test context for use in tests.
 // The returned context has its T field set to the current test.
 func GetTestContext(t *testing.T) *TestContext {
 	if globalTestContext == nil {
 		t.Fatal("Global test context not initialized. This should not happen.")
 	}
-	
+
 	// Create a shallow copy with the current test's T
 	return &TestContext{
 		BinaryPath:        globalTestContext.BinaryPath,
@@ -48,10 +46,10 @@ func GetTestContext(t *testing.T) *TestContext {
 type CommandResult struct {
 	// Stdout contains the standard output from the command.
 	Stdout string
-	
+
 	// Stderr contains the standard error output from the command.
 	Stderr string
-	
+
 	// ExitCode is the exit code returned by the command.
 	ExitCode int
 }
@@ -62,23 +60,23 @@ type CommandResult struct {
 func (tc *TestContext) RunCommand(args ...string) *CommandResult {
 	cmd := exec.Command(tc.BinaryPath, args...)
 	cmd.Dir = tc.SampleProjectPath
-	
+
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	
+
 	// Start the command with a timeout
 	err := cmd.Start()
 	if err != nil {
 		tc.T.Fatalf("Failed to start command: %v", err)
 	}
-	
+
 	// Wait for completion with timeout
 	done := make(chan error)
 	go func() {
 		done <- cmd.Wait()
 	}()
-	
+
 	select {
 	case err := <-done:
 		exitCode := 0
@@ -101,27 +99,26 @@ func (tc *TestContext) RunCommand(args ...string) *CommandResult {
 	}
 }
 
-
 // RunCommandWithTimeout is like RunCommand but allows specifying a custom timeout.
 // This is useful for commands that may take longer, like initial daemon startup.
 func (tc *TestContext) RunCommandWithTimeout(args []string, timeout time.Duration) *CommandResult {
 	cmd := exec.Command(tc.BinaryPath, args...)
 	cmd.Dir = tc.SampleProjectPath
-	
+
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	
+
 	err := cmd.Start()
 	if err != nil {
 		tc.T.Fatalf("Failed to start command: %v", err)
 	}
-	
+
 	done := make(chan error)
 	go func() {
 		done <- cmd.Wait()
 	}()
-	
+
 	select {
 	case err := <-done:
 		exitCode := 0

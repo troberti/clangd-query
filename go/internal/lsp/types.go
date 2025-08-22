@@ -50,13 +50,13 @@ type ClientCapabilities struct {
 }
 
 type TextDocumentClientCapabilities struct {
-	Synchronization    TextDocumentSyncClientCapabilities `json:"synchronization,omitempty"`
-	Hover              HoverClientCapabilities             `json:"hover,omitempty"`
-	Definition         DefinitionClientCapabilities        `json:"definition,omitempty"`
-	References         ReferencesClientCapabilities        `json:"references,omitempty"`
-	DocumentSymbol     DocumentSymbolClientCapabilities    `json:"documentSymbol,omitempty"`
-	FoldingRange       FoldingRangeClientCapabilities      `json:"foldingRange,omitempty"`
-	TypeHierarchy      TypeHierarchyClientCapabilities     `json:"typeHierarchy,omitempty"`
+	Synchronization TextDocumentSyncClientCapabilities `json:"synchronization,omitempty"`
+	Hover           HoverClientCapabilities            `json:"hover,omitempty"`
+	Definition      DefinitionClientCapabilities       `json:"definition,omitempty"`
+	References      ReferencesClientCapabilities       `json:"references,omitempty"`
+	DocumentSymbol  DocumentSymbolClientCapabilities   `json:"documentSymbol,omitempty"`
+	FoldingRange    FoldingRangeClientCapabilities     `json:"foldingRange,omitempty"`
+	TypeHierarchy   TypeHierarchyClientCapabilities    `json:"typeHierarchy,omitempty"`
 }
 
 type TextDocumentSyncClientCapabilities struct {
@@ -81,9 +81,9 @@ type ReferencesClientCapabilities struct {
 }
 
 type DocumentSymbolClientCapabilities struct {
-	DynamicRegistration               bool `json:"dynamicRegistration,omitempty"`
+	DynamicRegistration               bool                   `json:"dynamicRegistration,omitempty"`
 	SymbolKind                        map[string]interface{} `json:"symbolKind,omitempty"`
-	HierarchicalDocumentSymbolSupport bool `json:"hierarchicalDocumentSymbolSupport,omitempty"`
+	HierarchicalDocumentSymbolSupport bool                   `json:"hierarchicalDocumentSymbolSupport,omitempty"`
 }
 
 type FoldingRangeClientCapabilities struct {
@@ -97,7 +97,7 @@ type TypeHierarchyClientCapabilities struct {
 }
 
 type WorkspaceClientCapabilities struct {
-	Symbol              WorkspaceSymbolClientCapabilities `json:"symbol,omitempty"`
+	Symbol                WorkspaceSymbolClientCapabilities       `json:"symbol,omitempty"`
 	DidChangeWatchedFiles DidChangeWatchedFilesClientCapabilities `json:"didChangeWatchedFiles,omitempty"`
 }
 
@@ -115,15 +115,15 @@ type InitializeResult struct {
 }
 
 type ServerCapabilities struct {
-	TextDocumentSync           interface{}         `json:"textDocumentSync,omitempty"`
-	HoverProvider              bool                `json:"hoverProvider,omitempty"`
-	DefinitionProvider         bool                `json:"definitionProvider,omitempty"`
-	DeclarationProvider        bool                `json:"declarationProvider,omitempty"`
-	ReferencesProvider         bool                `json:"referencesProvider,omitempty"`
-	DocumentSymbolProvider     bool                `json:"documentSymbolProvider,omitempty"`
-	WorkspaceSymbolProvider    bool                `json:"workspaceSymbolProvider,omitempty"`
-	FoldingRangeProvider       bool                `json:"foldingRangeProvider,omitempty"`
-	TypeHierarchyProvider      bool                `json:"typeHierarchyProvider,omitempty"`
+	TextDocumentSync        interface{} `json:"textDocumentSync,omitempty"`
+	HoverProvider           bool        `json:"hoverProvider,omitempty"`
+	DefinitionProvider      bool        `json:"definitionProvider,omitempty"`
+	DeclarationProvider     bool        `json:"declarationProvider,omitempty"`
+	ReferencesProvider      bool        `json:"referencesProvider,omitempty"`
+	DocumentSymbolProvider  bool        `json:"documentSymbolProvider,omitempty"`
+	WorkspaceSymbolProvider bool        `json:"workspaceSymbolProvider,omitempty"`
+	FoldingRangeProvider    bool        `json:"foldingRangeProvider,omitempty"`
+	TypeHierarchyProvider   bool        `json:"typeHierarchyProvider,omitempty"`
 }
 
 // Document operations
@@ -137,7 +137,7 @@ type DidCloseTextDocumentParams struct {
 }
 
 type DidChangeTextDocumentParams struct {
-	TextDocument   VersionedTextDocumentIdentifier `json:"textDocument"`
+	TextDocument   VersionedTextDocumentIdentifier  `json:"textDocument"`
 	ContentChanges []TextDocumentContentChangeEvent `json:"contentChanges"`
 }
 
@@ -344,8 +344,8 @@ type DidChangeWatchedFilesParams struct {
 }
 
 type FileEvent struct {
-	URI  string           `json:"uri"`
-	Type FileChangeType   `json:"type"`
+	URI  string         `json:"uri"`
+	Type FileChangeType `json:"type"`
 }
 
 type FileChangeType int
@@ -359,16 +359,16 @@ const (
 // Progress notifications
 
 type ProgressParams struct {
-	Token interface{}     `json:"token"`
-	Value ProgressValue   `json:"value"`
+	Token interface{}   `json:"token"`
+	Value ProgressValue `json:"value"`
 }
 
 type ProgressValue struct {
-	Kind        string  `json:"kind"`
-	Title       string  `json:"title,omitempty"`
-	Message     string  `json:"message,omitempty"`
-	Percentage  *int    `json:"percentage,omitempty"`
-	Cancellable bool    `json:"cancellable,omitempty"`
+	Kind        string `json:"kind"`
+	Title       string `json:"title,omitempty"`
+	Message     string `json:"message,omitempty"`
+	Percentage  *int   `json:"percentage,omitempty"`
+	Cancellable bool   `json:"cancellable,omitempty"`
 }
 
 // Definition/Declaration
@@ -401,56 +401,56 @@ type ParsedDocumentation struct {
 	// be properly extracted into the other public fields. If information is missing,
 	// improve the GetDocumentation() parsing logic instead of accessing this field directly.
 	raw string
-	
+
 	// Description contains the cleaned documentation text without technical details like
 	// size/offset/alignment information. This is the human-readable documentation that
 	// explains what a symbol does, typically extracted from doc comments like @brief or
 	// plain documentation text. Line breaks and formatting are preserved where meaningful.
 	Description string
-	
+
 	// Inheritance describes the inheritance chain for classes and structs. This includes
 	// base classes and their access levels, formatted as they appear in the class
 	// declaration. For example: "public BaseClass, private Interface" indicates that
 	// the class publicly inherits from BaseClass and privately inherits from Interface.
 	// This field is extracted from class declarations found in code blocks.
 	Inheritance string
-	
+
 	// AccessLevel indicates the access level of a member or method within its containing
 	// class. Valid values are "public", "private", or "protected". This information is
 	// determined by looking for access specifiers in the code blocks of hover documentation.
 	// For free functions or global symbols, this field will be empty.
 	AccessLevel string
-	
+
 	// Signature contains the complete signature for methods and functions, including the
 	// return type, function name, and parameter list. For example: "void setValue(int x, int y)"
 	// or "std::string getName() const". This is typically extracted from code blocks in the
 	// hover documentation and represents how the function would be declared.
 	Signature string
-	
+
 	// Type specifies the type of a field or member variable. This includes the complete
 	// type specification with all qualifiers and template parameters. Examples include
 	// "const View*", "std::vector<int>", or "std::optional<std::string>". This field
 	// is populated for member variables but not for functions or methods.
 	Type string
-	
+
 	// DefaultValue contains the default initialization value for fields that have one.
 	// This is the value assigned at declaration, such as "nullptr", "42", or "{1, 2, 3}".
 	// The value is stored as it appears in the source code, including any necessary
 	// syntax like braces for aggregate initialization.
 	DefaultValue string
-	
+
 	// ReturnType specifies the return type for methods and functions. This is extracted
 	// from the "→ Type" notation that appears in clangd's hover documentation. The type
 	// is stored without the arrow prefix and may include complex types with templates,
 	// such as "std::optional<int>" or "const Widget*".
 	ReturnType string
-	
+
 	// ParametersText contains the raw parameter documentation for methods and functions
 	// if available. This is typically the full "Parameters:" section from the hover
 	// documentation, formatted as a single string with proper indentation. It includes
 	// parameter names, types, and any associated documentation for each parameter.
 	ParametersText string
-	
+
 	// Modifiers contains method and function modifiers extracted from the signature.
 	// Common modifiers include "static", "virtual", "override", "const", "explicit",
 	// "inline", and "noexcept". Special markers are also included: "pure virtual" for
@@ -458,7 +458,7 @@ type ParsedDocumentation struct {
 	// "defaulted" for defaulted functions (= default). The modifiers help understand
 	// the function's behavior and constraints.
 	Modifiers []string
-	
+
 	// TemplateParams contains the template parameters if this is a template function,
 	// method, or class. The format includes the angle brackets and parameter declarations,
 	// such as "<typename T, typename U>" or "<class T, int N>". This helps identify

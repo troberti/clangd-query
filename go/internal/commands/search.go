@@ -12,13 +12,13 @@ import (
 // The output format exactly matches the TypeScript implementation.
 func Search(client *lsp.ClangdClient, query string, limit int, log logger.Logger) (string, error) {
 	log.Info("Searching for symbols matching: %s (limit: %d)", query, limit)
-	
+
 	// Perform workspace symbol search
 	symbols, err := client.WorkspaceSymbol(query)
 	if err != nil {
 		return "", err
 	}
-	
+
 	log.Debug("Found %d total symbols", len(symbols))
 
 	// Handle no results
@@ -48,9 +48,9 @@ func Search(client *lsp.ClangdClient, query string, limit int, log logger.Logger
 		absolutePath := client.PathFromFileURI(symbol.Location.URI)
 		// Convert to relative path for display
 		relativePath := client.ToRelativePath(absolutePath)
-		
+
 		// Format location
-		line := symbol.Location.Range.Start.Line + 1      // Convert to 1-based
+		line := symbol.Location.Range.Start.Line + 1 // Convert to 1-based
 		column := symbol.Location.Range.Start.Character + 1
 		formattedLocation := fmt.Sprintf("%s:%d:%d", relativePath, line, column)
 
@@ -61,5 +61,3 @@ func Search(client *lsp.ClangdClient, query string, limit int, log logger.Logger
 	// Remove trailing newline
 	return strings.TrimRight(output, "\n"), nil
 }
-
-

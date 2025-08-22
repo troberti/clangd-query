@@ -15,26 +15,26 @@ import (
 // context, starts the daemon once, and runs all tests with the shared daemon.
 func TestMain(m *testing.M) {
 	log.Println("TestMain: Starting test suite setup...")
-	
+
 	// Initialize the global test context
 	if err := initializeGlobalContext(); err != nil {
 		log.Fatalf("Failed to initialize test context: %v", err)
 	}
-	
+
 	// Ensure daemon is ready before running any tests
 	log.Println("Starting daemon and waiting for it to be ready...")
 	if err := waitForDaemonReady(); err != nil {
 		log.Fatalf("Failed to start daemon: %v", err)
 	}
 	log.Println("Daemon is ready, running tests...")
-	
+
 	// Run all tests
 	exitCode := m.Run()
-	
+
 	// Always shutdown daemon before exiting
 	log.Println("Shutting down daemon...")
 	shutdownDaemon()
-	
+
 	os.Exit(exitCode)
 }
 
@@ -44,27 +44,27 @@ func initializeGlobalContext() error {
 	if !ok {
 		return os.ErrNotExist
 	}
-	
+
 	// main_test.go is in go/test/, we need to go up to project root
 	testDir := filepath.Dir(filename)
 	goDir := filepath.Dir(testDir)
 	projectRoot := filepath.Dir(goDir)
-	
+
 	globalTestContext = &TestContext{
 		BinaryPath:        filepath.Join(projectRoot, "bin", "clangd-query"),
 		SampleProjectPath: filepath.Join(projectRoot, "test", "fixtures", "sample-project"),
 	}
-	
+
 	// Verify the binary exists
 	if _, err := os.Stat(globalTestContext.BinaryPath); os.IsNotExist(err) {
 		return err
 	}
-	
+
 	// Verify the sample project exists
 	if _, err := os.Stat(globalTestContext.SampleProjectPath); os.IsNotExist(err) {
 		return err
 	}
-	
+
 	return nil
 }
 
@@ -72,21 +72,21 @@ func initializeGlobalContext() error {
 func waitForDaemonReady() error {
 	cmd := exec.Command(globalTestContext.BinaryPath, "status")
 	cmd.Dir = globalTestContext.SampleProjectPath
-	
+
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	
+
 	err := cmd.Start()
 	if err != nil {
 		return err
 	}
-	
+
 	done := make(chan error)
 	go func() {
 		done <- cmd.Wait()
 	}()
-	
+
 	select {
 	case err := <-done:
 		if err != nil {
@@ -108,7 +108,7 @@ func waitForDaemonReady() error {
 func shutdownDaemon() {
 	cmd := exec.Command(globalTestContext.BinaryPath, "shutdown")
 	cmd.Dir = globalTestContext.SampleProjectPath
-	
+
 	// We don't care too much about errors here, just try to shut it down
 	_ = cmd.Run()
 }

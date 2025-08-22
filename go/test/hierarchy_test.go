@@ -6,7 +6,7 @@ import (
 
 func TestHierarchyCommand(t *testing.T) {
 	tc := GetTestContext(t)
-	
+
 	t.Run("View hierarchy of Character derived class", func(t *testing.T) {
 		result := tc.RunCommand("hierarchy", "Character")
 		tc.AssertExitCode(result, 0)
@@ -17,7 +17,7 @@ func TestHierarchyCommand(t *testing.T) {
 		tc.AssertContains(result.Stdout, "├── Enemy")
 		tc.AssertContains(result.Stdout, "└── Player")
 	})
-	
+
 	// Additional test: hierarchy of base class
 	t.Run("View hierarchy of GameObject base class", func(t *testing.T) {
 		result := tc.RunCommand("hierarchy", "GameObject")
@@ -29,7 +29,7 @@ func TestHierarchyCommand(t *testing.T) {
 		tc.AssertContains(result.Stdout, "GameObject - include/core/game_object.h")
 		tc.AssertContains(result.Stdout, "└── Character")
 	})
-	
+
 	// Additional test: interface hierarchy
 	t.Run("View hierarchy of Updatable interface", func(t *testing.T) {
 		result := tc.RunCommand("hierarchy", "Updatable")

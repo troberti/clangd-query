@@ -18,12 +18,12 @@ func formatMultiWordQueryHint(query string, commandName string) string {
 	hint += fmt.Sprintf("💡 Hint: %s only searches for single symbol names. ", commandName)
 	hint += "Try searching for just the class or method name:\n"
 	hint += fmt.Sprintf(`- %s "%s"`+"\n", commandName, firstWord)
-	
+
 	if lastWord != firstWord {
 		hint += "Or if looking for a specific method, try just the method name:\n"
 		hint += fmt.Sprintf(`- %s "%s"`, commandName, lastWord)
 	}
-	
+
 	return hint
 }
 
@@ -130,13 +130,13 @@ func wordWrap(text string, maxWidth int) []string {
 func formatLocation(client *lsp.ClangdClient, location lsp.Location) string {
 	// Extract path from URI
 	absolutePath := client.PathFromFileURI(location.URI)
-	
+
 	// Make path relative
 	relativePath := client.ToRelativePath(absolutePath)
-	
+
 	// Format with 1-based line and column numbers
-	return fmt.Sprintf("%s:%d:%d", relativePath, 
-		location.Range.Start.Line+1, 
+	return fmt.Sprintf("%s:%d:%d", relativePath,
+		location.Range.Start.Line+1,
 		location.Range.Start.Character+1)
 }
 

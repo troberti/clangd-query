@@ -16,10 +16,10 @@ import (
 // lock file to coordinate between multiple client connections and ensure only
 // one daemon runs per project.
 type LockInfo struct {
-	PID           int    `json:"pid"`
-	SocketPath    string `json:"socketPath"`
-	BuildTime     int64  `json:"buildTime"`
-	ProjectRoot   string `json:"projectRoot"`
+	PID         int    `json:"pid"`
+	SocketPath  string `json:"socketPath"`
+	BuildTime   int64  `json:"buildTime"`
+	ProjectRoot string `json:"projectRoot"`
 }
 
 // Returns the Unix domain socket path for a given project directory.
@@ -56,30 +56,30 @@ func GetLogPath(projectRoot string) string {
 // daemon binary has been updated and needs to be restarted.
 func WriteLockFile(projectRoot string, pid int, socketPath string) error {
 	lockPath := GetLockPath(projectRoot)
-	
+
 	// Get build time of current executable
 	execPath, err := os.Executable()
 	if err != nil {
 		return err
 	}
-	
+
 	stat, err := os.Stat(execPath)
 	if err != nil {
 		return err
 	}
-	
+
 	lockInfo := LockInfo{
 		PID:         pid,
 		SocketPath:  socketPath,
 		BuildTime:   stat.ModTime().Unix(),
 		ProjectRoot: projectRoot,
 	}
-	
+
 	data, err := json.MarshalIndent(lockInfo, "", "  ")
 	if err != nil {
 		return err
 	}
-	
+
 	return os.WriteFile(lockPath, data, 0644)
 }
 
@@ -89,7 +89,7 @@ func WriteLockFile(projectRoot string, pid int, socketPath string) error {
 // and whether it needs to be restarted due to binary updates.
 func ReadLockFile(projectRoot string) (*LockInfo, error) {
 	lockPath := GetLockPath(projectRoot)
-	
+
 	data, err := os.ReadFile(lockPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -97,12 +97,12 @@ func ReadLockFile(projectRoot string) (*LockInfo, error) {
 		}
 		return nil, err
 	}
-	
+
 	var lockInfo LockInfo
 	if err := json.Unmarshal(data, &lockInfo); err != nil {
 		return nil, err
 	}
-	
+
 	return &lockInfo, nil
 }
 
@@ -127,7 +127,7 @@ func IsProcessAlive(pid int) bool {
 	if pid <= 0 {
 		return false
 	}
-	
+
 	// Send signal 0 to check if process exists
 	err := syscall.Kill(pid, 0)
 	return err == nil
@@ -142,18 +142,18 @@ func IsDaemonStale(lockInfo *LockInfo) bool {
 	if !IsProcessAlive(lockInfo.PID) {
 		return true
 	}
-	
+
 	// Check if binary has been updated
 	execPath, err := os.Executable()
 	if err != nil {
 		return false // Can't determine, assume not stale
 	}
-	
+
 	stat, err := os.Stat(execPath)
 	if err != nil {
 		return false // Can't determine, assume not stale
 	}
-	
+
 	// If binary is newer than lock file, daemon is stale
 	return stat.ModTime().Unix() > lockInfo.BuildTime
 }
@@ -179,12 +179,12 @@ func GetBuildTime() (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	
+
 	stat, err := os.Stat(execPath)
 	if err != nil {
 		return 0, err
 	}
-	
+
 	return stat.ModTime().Unix(), nil
 }
 
@@ -195,7 +195,7 @@ func GetBuildTime() (int64, error) {
 // unbounded log growth while maintaining recent debugging information.
 func TruncateLogFile(projectRoot string, maxSize int64) error {
 	logPath := GetLogPath(projectRoot)
-	
+
 	stat, err := os.Stat(logPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -203,42 +203,42 @@ func TruncateLogFile(projectRoot string, maxSize int64) error {
 		}
 		return err
 	}
-	
+
 	if stat.Size() > maxSize {
 		// Keep last 10% of the file
 		keepSize := maxSize / 10
-		
+
 		file, err := os.OpenFile(logPath, os.O_RDWR, 0644)
 		if err != nil {
 			return err
 		}
 		defer file.Close()
-		
+
 		// Seek to position where we want to start keeping
 		_, err = file.Seek(stat.Size()-keepSize, 0)
 		if err != nil {
 			return err
 		}
-		
+
 		// Read the remaining content
 		remaining := make([]byte, keepSize)
 		n, err := file.Read(remaining)
 		if err != nil && err != io.EOF {
 			return err
 		}
-		
+
 		// Write header and remaining content to new file
 		tempFile := logPath + ".tmp"
 		header := fmt.Sprintf("=== Log truncated at %s ===\n", time.Now().Format(time.RFC3339))
 		content := append([]byte(header), remaining[:n]...)
-		
+
 		if err := os.WriteFile(tempFile, content, 0644); err != nil {
 			return err
 		}
-		
+
 		// Replace old file with new
 		return os.Rename(tempFile, logPath)
 	}
-	
+
 	return nil
 }

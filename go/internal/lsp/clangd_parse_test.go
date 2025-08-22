@@ -31,9 +31,9 @@ func assertSliceEqual(t *testing.T, got, want []string, field string) {
 // TestParseDocumentation tests the parseDocumentation function with real hover responses from clangd
 func TestParseDocumentation(t *testing.T) {
 	tests := []struct {
-		name string
+		name  string
 		input string
-		want ParsedDocumentation
+		want  ParsedDocumentation
 	}{
 		{
 			name: "GameObject class",
@@ -565,7 +565,7 @@ std::pair<iterator, bool> emplace(Args &&...args)
 	}
 
 	assertEqual(t, got.ReturnType, "std::pair<iterator, bool>", "ReturnType")
-	
+
 	if !strings.Contains(got.Description, "@brief Constructs element in-place") {
 		t.Errorf("Expected description to contain brief, got: %q", got.Description)
 	}

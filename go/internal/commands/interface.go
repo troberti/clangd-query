@@ -76,7 +76,7 @@ func Interface(client *lsp.ClangdClient, input string, log logger.Logger) (strin
 
 	// Format class name with location - use selection range start for more precise location
 	location := formatLocation(client, lsp.Location{
-		URI:   uri,
+		URI: uri,
 		Range: lsp.Range{
 			Start: targetSymbol.SelectionRange.Start,
 			End:   targetSymbol.SelectionRange.Start,
@@ -133,7 +133,7 @@ func Interface(client *lsp.ClangdClient, input string, log logger.Logger) (strin
 			// Fallback to symbol name and detail
 			signature = formatSymbolSignature(&child)
 		}
-		
+
 		// Prepend static if it's a static method
 		for _, modifier := range doc.Modifiers {
 			if modifier == "static" {

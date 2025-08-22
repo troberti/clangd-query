@@ -38,11 +38,11 @@ func parseArgs(args []string) (*Config, error) {
 
 	// First arg is the command
 	config.Command = args[0]
-	
+
 	// Parse everything after the command
 	i := 1
 	var commandArgs []string
-	
+
 	for i < len(args) {
 		arg := args[i]
 
@@ -64,9 +64,9 @@ func parseArgs(args []string) (*Config, error) {
 			if i+1 >= len(args) {
 				return nil, fmt.Errorf("flag %s requires a value", arg)
 			}
-			
+
 			value := args[i+1]
-			
+
 			switch arg {
 			case "--limit":
 				limit, err := strconv.Atoi(value)
@@ -131,7 +131,7 @@ func findProjectRoot(startDir string) (string, error) {
 		if _, err := os.Stat(filepath.Join(dir, "CMakeLists.txt")); err == nil {
 			return dir, nil
 		}
-		
+
 		parent := filepath.Dir(dir)
 		if parent == dir {
 			break
@@ -158,7 +158,7 @@ func runClient(config *Config) {
 		Timeout:     config.Timeout,
 		ProjectRoot: config.ProjectRoot,
 	}
-	
+
 	if err := client.Run(clientConfig); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -199,9 +199,9 @@ func main() {
 	}
 
 	// Validate command
-	validCommands := []string{"search", "show", "view", "usages", "hierarchy", 
+	validCommands := []string{"search", "show", "view", "usages", "hierarchy",
 		"signature", "interface", "logs", "status", "shutdown"}
-	
+
 	if config.Command == "" {
 		fmt.Fprintf(os.Stderr, "Error: no command specified\n")
 		printHelp()

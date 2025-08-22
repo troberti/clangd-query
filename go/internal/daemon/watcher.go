@@ -61,13 +61,13 @@ func (fw *FileWatcher) addDirectoryRecursive(dir string) error {
 		// Skip hidden directories and build directories
 		if info.IsDir() {
 			base := filepath.Base(path)
-			if strings.HasPrefix(base, ".") || 
-			   base == "build" || 
-			   base == "cmake-build-debug" || 
-			   base == "cmake-build-release" ||
-			   base == "out" ||
-			   base == "bin" ||
-			   base == "obj" {
+			if strings.HasPrefix(base, ".") ||
+				base == "build" ||
+				base == "cmake-build-debug" ||
+				base == "cmake-build-release" ||
+				base == "out" ||
+				base == "bin" ||
+				base == "obj" {
 				return filepath.SkipDir
 			}
 
@@ -133,16 +133,16 @@ func (fw *FileWatcher) handleFileChange(path string) {
 	// Start new timer
 	fw.debounceTimer = time.AfterFunc(500*time.Millisecond, func() {
 		fw.debounceMu.Lock()
-		
+
 		// Collect all changed files
 		files := make([]string, 0, len(fw.changedFiles))
 		for file := range fw.changedFiles {
 			files = append(files, file)
 		}
-		
+
 		// Clear the map
 		fw.changedFiles = make(map[string]bool)
-		
+
 		fw.debounceMu.Unlock()
 
 		// Call the callback
@@ -157,8 +157,8 @@ func (fw *FileWatcher) isCppFile(path string) bool {
 	ext := strings.ToLower(filepath.Ext(path))
 	switch ext {
 	case ".cpp", ".cc", ".cxx", ".c++",
-	     ".h", ".hpp", ".hxx", ".h++",
-	     ".c", ".hh":
+		".h", ".hpp", ".hxx", ".h++",
+		".c", ".hh":
 		return true
 	default:
 		return false
@@ -168,12 +168,12 @@ func (fw *FileWatcher) isCppFile(path string) bool {
 // Stop stops the file watcher
 func (fw *FileWatcher) Stop() error {
 	close(fw.stop)
-	
+
 	fw.debounceMu.Lock()
 	if fw.debounceTimer != nil {
 		fw.debounceTimer.Stop()
 	}
 	fw.debounceMu.Unlock()
-	
+
 	return fw.watcher.Close()
 }

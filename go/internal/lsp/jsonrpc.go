@@ -58,8 +58,8 @@ type Transport struct {
 	pending map[interface{}]chan *Response
 	mu      sync.Mutex
 
-	handlers      map[string]NotificationHandler
-	handlersMu    sync.RWMutex
+	handlers   map[string]NotificationHandler
+	handlersMu sync.RWMutex
 }
 
 type NotificationHandler func(params json.RawMessage)
@@ -84,7 +84,7 @@ func (t *Transport) RegisterNotificationHandler(method string, handler Notificat
 // SendRequest sends a request and waits for the response
 func (t *Transport) SendRequest(method string, params interface{}) (json.RawMessage, error) {
 	id := atomic.AddInt64(&t.nextID, 1)
-	
+
 	paramsJSON, err := json.Marshal(params)
 	if err != nil {
 		return nil, err
@@ -114,7 +114,7 @@ func (t *Transport) SendRequest(method string, params interface{}) (json.RawMess
 
 	// Wait for response
 	resp := <-respChan
-	
+
 	if resp.Error != nil {
 		return nil, fmt.Errorf("RPC error %d: %s", resp.Error.Code, resp.Error.Message)
 	}
@@ -145,7 +145,7 @@ func (t *Transport) Start() {
 
 func (t *Transport) readLoop() {
 	reader := bufio.NewReader(t.stdin)
-	
+
 	for {
 		// Read headers
 		var contentLength int
@@ -157,14 +157,14 @@ func (t *Transport) readLoop() {
 				}
 				return
 			}
-			
+
 			line = strings.TrimSpace(line)
-			
+
 			if line == "" {
 				// Empty line marks end of headers
 				break
 			}
-			
+
 			if strings.HasPrefix(line, "Content-Length: ") {
 				lengthStr := strings.TrimPrefix(line, "Content-Length: ")
 				length, err := strconv.Atoi(strings.TrimSpace(lengthStr))
@@ -176,11 +176,11 @@ func (t *Transport) readLoop() {
 			}
 			// Ignore other headers like Content-Type
 		}
-		
+
 		if contentLength == 0 {
 			continue
 		}
-		
+
 		// Read content
 		content := make([]byte, contentLength)
 		n, err := io.ReadFull(reader, content)
@@ -192,7 +192,7 @@ func (t *Transport) readLoop() {
 			fmt.Fprintf(t.stderr, "Content length mismatch: expected %d, got %d\n", contentLength, n)
 			continue
 		}
-		
+
 		// Parse and handle message
 		t.handleMessage(content)
 	}
@@ -215,7 +215,7 @@ func (t *Transport) handleMessage(content []byte) {
 				fmt.Fprintf(t.stderr, "Failed to parse response: %v\n", err)
 				return
 			}
-			
+
 			t.mu.Lock()
 			if ch, ok := t.pending[id]; ok {
 				ch <- &resp
@@ -256,7 +256,7 @@ func (t *Transport) writeMessage(msg interface{}) error {
 	}
 
 	header := fmt.Sprintf("Content-Length: %d\r\n\r\n", len(content))
-	
+
 	t.mu.Lock()
 	defer t.mu.Unlock()
 

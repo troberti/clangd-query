@@ -40,9 +40,9 @@ type Daemon struct {
 
 // Request represents a client request
 type Request struct {
-	ID      interface{}            `json:"id"`
-	Method  string                 `json:"method"`
-	Params  map[string]interface{} `json:"params,omitempty"`
+	ID     interface{}            `json:"id"`
+	Method string                 `json:"method"`
+	Params map[string]interface{} `json:"params,omitempty"`
 }
 
 // Response represents a daemon response
@@ -140,19 +140,19 @@ func Run(config *Config) {
 
 func (d *Daemon) setupLogging(verbose bool) error {
 	logPath := GetLogPath(d.projectRoot)
-	
+
 	// Determine file log level based on verbose flag
 	fileLogLevel := logger.LevelInfo
 	if verbose {
 		fileLogLevel = logger.LevelDebug
 	}
-	
+
 	// Create file logger
 	fileLogger, err := logger.NewFileLogger(logPath, fileLogLevel)
 	if err != nil {
 		return err
 	}
-	
+
 	d.logger = fileLogger
 	return nil
 }
@@ -338,7 +338,7 @@ func (d *Daemon) handleRequest(req Request) (json.RawMessage, error) {
 
 	// All other commands go to clangd
 	input, _ := req.Params["symbol"].(string)
-	
+
 	limit := -1
 	if l, ok := req.Params["limit"].(float64); ok {
 		limit = int(l)
@@ -346,7 +346,7 @@ func (d *Daemon) handleRequest(req Request) (json.RawMessage, error) {
 
 	var output string
 	var err error
-	
+
 	switch req.Method {
 	case "search":
 		output, err = commands.Search(d.clangdClient, input, limit, d.logger)
@@ -408,7 +408,6 @@ func (d *Daemon) handleLogs(req Request) (json.RawMessage, error) {
 	logs := d.logger.GetLogs(minLevel)
 	return json.Marshal(map[string]string{"logs": logs})
 }
-
 
 func (d *Daemon) onFilesChanged(files []string) {
 	d.log("Files changed: %v", files)

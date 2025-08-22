@@ -252,7 +252,7 @@ func (c *Client) handleCommand(config *Config) (string, error) {
 		return c.Signature(symbol)
 	case "interface":
 		return c.Interface(symbol)
-		
+
 	case "logs":
 		// Parse log level from arguments
 		logLevel := "info" // default
@@ -268,7 +268,7 @@ func (c *Client) handleCommand(config *Config) (string, error) {
 			logLevel = "verbose"
 		}
 		return c.GetLogs(logLevel)
-		
+
 	case "status":
 		status, err := c.GetStatus()
 		if err != nil {
@@ -276,13 +276,13 @@ func (c *Client) handleCommand(config *Config) (string, error) {
 		}
 		return fmt.Sprintf("Daemon Status:\n  PID: %d\n  Project: %s\n  Uptime: %s\n  Requests: %d\n  Connections: %d\n",
 			status.PID, status.ProjectRoot, status.Uptime, status.TotalRequests, status.Connections), nil
-			
+
 	case "shutdown":
 		if err := c.Shutdown(); err != nil {
 			return "", err
 		}
 		return "Daemon shutdown initiated\n", nil
-		
+
 	default:
 		return "", fmt.Errorf("unknown command: %s", config.Command)
 	}

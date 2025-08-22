@@ -6,7 +6,7 @@ import (
 
 func TestShowCommand(t *testing.T) {
 	tc := GetTestContext(t)
-	
+
 	t.Run("Show GameObject::Update method with separate declaration/definition", func(t *testing.T) {
 		result := tc.RunCommand("show", "GameObject::Update")
 		tc.AssertExitCode(result, 0)
@@ -19,7 +19,7 @@ func TestShowCommand(t *testing.T) {
 		tc.AssertContains(result.Stdout, "void GameObject::Update(float delta_time) {")
 		tc.AssertContains(result.Stdout, "OnUpdate(delta_time);")
 	})
-	
+
 	t.Run("Show inline IsActive method", func(t *testing.T) {
 		result := tc.RunCommand("show", "GameObject::IsActive")
 		tc.AssertExitCode(result, 0)
@@ -27,7 +27,7 @@ func TestShowCommand(t *testing.T) {
 		tc.AssertContains(result.Stdout, "From include/core/game_object.h")
 		tc.AssertContains(result.Stdout, "bool IsActive() const override { return active_; }")
 	})
-	
+
 	t.Run("Show template GetComponent method", func(t *testing.T) {
 		result := tc.RunCommand("show", "GetComponent")
 		tc.AssertExitCode(result, 0)
@@ -36,7 +36,7 @@ func TestShowCommand(t *testing.T) {
 		tc.AssertContains(result.Stdout, "GameObject::GetComponent() const {")
 		tc.AssertContains(result.Stdout, "std::dynamic_pointer_cast<T>")
 	})
-	
+
 	t.Run("Show Engine class complete implementation", func(t *testing.T) {
 		result := tc.RunCommand("show", "Engine")
 		tc.AssertExitCode(result, 0)
@@ -51,13 +51,13 @@ func TestShowCommand(t *testing.T) {
 		// Verify it shows the closing brace
 		tc.AssertContains(result.Stdout, "};")
 	})
-	
+
 	t.Run("Show non-existent symbol", func(t *testing.T) {
 		result := tc.RunCommand("show", "NonExistentMethod")
 		tc.AssertExitCode(result, 0)
 		tc.AssertContains(result.Stdout, "No symbols found matching \"NonExistentMethod\"")
 	})
-	
+
 	// Additional test: Show Transform class
 	t.Run("Show Transform class", func(t *testing.T) {
 		result := tc.RunCommand("show", "Transform")
@@ -69,7 +69,7 @@ func TestShowCommand(t *testing.T) {
 		tc.AssertContains(result.Stdout, "rotation_")
 		tc.AssertContains(result.Stdout, "scale_")
 	})
-	
+
 	// Additional test: Show actual struct (Vector3)
 	t.Run("Show Vector3 struct", func(t *testing.T) {
 		result := tc.RunCommand("show", "Vector3")

@@ -34,7 +34,7 @@ func Show(client *lsp.ClangdClient, query string, log logger.Logger) (string, er
 
 	// Get the symbol's location
 	symbolPath := client.PathFromFileURI(symbol.Location.URI)
-	
+
 	log.Debug("Found %s '%s' at %s", symbolKindName, fullName, symbolPath)
 
 	// For methods and functions, try to find both declaration and definition
@@ -47,9 +47,9 @@ func Show(client *lsp.ClangdClient, query string, log logger.Logger) (string, er
 
 	var locations []locationInfo
 
-	if symbol.Kind == lsp.SymbolKindFunction || 
-	   symbol.Kind == lsp.SymbolKindMethod || 
-	   symbol.Kind == lsp.SymbolKindConstructor {
+	if symbol.Kind == lsp.SymbolKindFunction ||
+		symbol.Kind == lsp.SymbolKindMethod ||
+		symbol.Kind == lsp.SymbolKindConstructor {
 
 		// Determine if the symbol location is a definition or declaration
 		symbolHasBody, _ := hasBody(symbolPath, symbol.Location.Range.Start.Line)
@@ -81,8 +81,8 @@ func Show(client *lsp.ClangdClient, query string, log logger.Logger) (string, er
 				defPath := client.PathFromFileURI(def.URI)
 
 				// Skip if it's the same location
-				if defPath == symbolPath && 
-				   def.Range.Start.Line == symbol.Location.Range.Start.Line {
+				if defPath == symbolPath &&
+					def.Range.Start.Line == symbol.Location.Range.Start.Line {
 					continue
 				}
 
@@ -170,8 +170,8 @@ func Show(client *lsp.ClangdClient, query string, log logger.Logger) (string, er
 				continue
 			}
 			line := strings.TrimSpace(lines[j])
-			if strings.HasPrefix(line, "//") || strings.HasPrefix(line, "/*") || 
-			   strings.HasPrefix(line, "*") || line == "*/" {
+			if strings.HasPrefix(line, "//") || strings.HasPrefix(line, "/*") ||
+				strings.HasPrefix(line, "*") || line == "*/" {
 				commentStart = j
 			} else if line != "" {
 				// Non-comment, non-empty line - stop
@@ -180,9 +180,9 @@ func Show(client *lsp.ClangdClient, query string, log logger.Logger) (string, er
 		}
 
 		// Handle functions/methods based on whether they are definitions
-		if (symbol.Kind == lsp.SymbolKindFunction || 
-		    symbol.Kind == lsp.SymbolKindMethod || 
-		    symbol.Kind == lsp.SymbolKindConstructor) {
+		if symbol.Kind == lsp.SymbolKindFunction ||
+			symbol.Kind == lsp.SymbolKindMethod ||
+			symbol.Kind == lsp.SymbolKindConstructor {
 
 			if loc.isDefinition {
 				// This is a definition, show the complete implementation
@@ -217,9 +217,9 @@ func Show(client *lsp.ClangdClient, query string, log logger.Logger) (string, er
 				contextStart = commentStart
 				contextEnd = loc.location.Range.End.Line
 			}
-		} else if symbol.Kind == lsp.SymbolKindClass || 
-		          symbol.Kind == lsp.SymbolKindStruct || 
-		          symbol.Kind == lsp.SymbolKindEnum {
+		} else if symbol.Kind == lsp.SymbolKindClass ||
+			symbol.Kind == lsp.SymbolKindStruct ||
+			symbol.Kind == lsp.SymbolKindEnum {
 			// Use comments we already found
 			contextStart = commentStart
 
@@ -252,7 +252,7 @@ func Show(client *lsp.ClangdClient, query string, log logger.Logger) (string, er
 		// Extract the context lines
 		var extractedLines []string
 		if contextStart <= contextEnd {
-			extractedLines = lines[contextStart:contextEnd+1]
+			extractedLines = lines[contextStart : contextEnd+1]
 		}
 
 		// Format the section header
@@ -261,9 +261,9 @@ func Show(client *lsp.ClangdClient, query string, log logger.Logger) (string, er
 		formattedLoc := formatLocation(client, loc.location)
 
 		// Always show the type for functions/methods/constructors
-		if symbol.Kind == lsp.SymbolKindFunction || 
-		   symbol.Kind == lsp.SymbolKindMethod || 
-		   symbol.Kind == lsp.SymbolKindConstructor {
+		if symbol.Kind == lsp.SymbolKindFunction ||
+			symbol.Kind == lsp.SymbolKindMethod ||
+			symbol.Kind == lsp.SymbolKindConstructor {
 			if loc.locType == "declaration" {
 				result += fmt.Sprintf("From %s (declaration)\n", formattedLoc)
 			} else if loc.locType == "definition" {
@@ -294,19 +294,18 @@ func hasBody(filePath string, startLine int) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	
+
 	lines := strings.Split(string(content), "\n")
-	
+
 	// Check the next few lines for an opening brace
 	for i := startLine; i < min(startLine+5, len(lines)); i++ {
 		if i < len(lines) && strings.Contains(lines[i], "{") {
 			return true, nil
 		}
 	}
-	
+
 	return false, nil
 }
-
 
 // min returns the minimum of two integers
 func min(a, b int) int {
@@ -316,11 +315,10 @@ func min(a, b int) int {
 	return b
 }
 
-// max returns the maximum of two integers  
+// max returns the maximum of two integers
 func max(a, b int) int {
 	if a > b {
 		return a
 	}
 	return b
 }
-
