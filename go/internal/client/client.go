@@ -257,6 +257,79 @@ func (c *Client) Shutdown() error {
 	return err
 }
 
+// handleCommand processes a command and returns the output as a string
+func (c *Client) handleCommand(config *Config) (string, error) {
+	// Extract symbol if needed
+	symbolCommands := map[string]bool{
+		"search":    true,
+		"show":      true,
+		"view":      true,
+		"usages":    true,
+		"hierarchy": true,
+		"signature": true,
+		"interface": true,
+	}
+
+	symbol := ""
+	if symbolCommands[config.Command] {
+		if len(config.Arguments) == 0 {
+			return "", fmt.Errorf("%s requires a symbol argument", config.Command)
+		}
+		symbol = config.Arguments[0]
+	}
+
+	// Handle each command
+	switch config.Command {
+	case "search":
+		return c.Search(symbol, config.Limit)
+	case "show":
+		return c.Show(symbol)
+	case "view":
+		return c.View(symbol)
+	case "usages":
+		return c.Usages(symbol, config.Limit)
+	case "hierarchy":
+		return c.Hierarchy(symbol, config.Limit)
+	case "signature":
+		return c.Signature(symbol)
+	case "interface":
+		return c.Interface(symbol)
+		
+	case "logs":
+		// Parse log level from arguments
+		logLevel := "info" // default
+		for _, arg := range config.Arguments {
+			if arg == "--verbose" || arg == "-v" {
+				logLevel = "verbose"
+			} else if arg == "--error" || arg == "-e" {
+				logLevel = "error"
+			}
+		}
+		// Global verbose flag overrides
+		if config.Verbose {
+			logLevel = "verbose"
+		}
+		return c.GetLogs(logLevel)
+		
+	case "status":
+		status, err := c.GetStatus()
+		if err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("Daemon Status:\n  PID: %d\n  Project: %s\n  Uptime: %s\n  Requests: %d\n  Connections: %d\n",
+			status.PID, status.ProjectRoot, status.Uptime, status.TotalRequests, status.Connections), nil
+			
+	case "shutdown":
+		if err := c.Shutdown(); err != nil {
+			return "", err
+		}
+		return "Daemon shutdown initiated\n", nil
+		
+	default:
+		return "", fmt.Errorf("unknown command: %s", config.Command)
+	}
+}
+
 // Run executes the client with the given configuration
 func Run(config *Config) error {
 	// Get project root from config
@@ -310,119 +383,12 @@ func Run(config *Config) error {
 	// Create client
 	client := NewClient(conn, time.Duration(config.Timeout)*time.Second)
 
-	// Define which commands need a symbol parameter
-	symbolCommands := map[string]bool{
-		"search":    true,
-		"show":      true,
-		"view":      true,
-		"usages":    true,
-		"hierarchy": true,
-		"signature": true,
-		"interface": true,
+	// Execute command and print output
+	output, err := client.handleCommand(config)
+	if err != nil {
+		return err
 	}
-
-	// Extract symbol if needed
-	symbol := ""
-	if symbolCommands[config.Command] {
-		if len(config.Arguments) == 0 {
-			return fmt.Errorf("%s requires a symbol argument", config.Command)
-		}
-		symbol = config.Arguments[0]
-	}
-
-	// Execute command
-	switch config.Command {
-	case "search":
-		output, err := client.Search(symbol, config.Limit)
-		if err != nil {
-			return err
-		}
-		fmt.Println(output)
-
-	case "show":
-		output, err := client.Show(symbol)
-		if err != nil {
-			return err
-		}
-		fmt.Println(output)
-
-	case "view":
-		output, err := client.View(symbol)
-		if err != nil {
-			return err
-		}
-		fmt.Println(output)
-
-	case "usages":
-		output, err := client.Usages(symbol, config.Limit)
-		if err != nil {
-			return err
-		}
-		fmt.Println(output)
-
-	case "hierarchy":
-		output, err := client.Hierarchy(symbol, config.Limit)
-		if err != nil {
-			return err
-		}
-		fmt.Println(output)
-
-	case "signature":
-		output, err := client.Signature(symbol)
-		if err != nil {
-			return err
-		}
-		fmt.Println(output)
-
-	case "interface":
-		output, err := client.Interface(symbol)
-		if err != nil {
-			return err
-		}
-		fmt.Println(output)
-
-	case "logs":
-		// Parse log level from arguments
-		logLevel := "info" // default
-		for _, arg := range config.Arguments {
-			if arg == "--verbose" || arg == "-v" {
-				logLevel = "verbose"
-			} else if arg == "--error" || arg == "-e" {
-				logLevel = "error"
-			}
-		}
-		// Global verbose flag overrides
-		if config.Verbose {
-			logLevel = "verbose"
-		}
-
-		logs, err := client.GetLogs(logLevel)
-		if err != nil {
-			return err
-		}
-		fmt.Print(logs)
-
-	case "status":
-		status, err := client.GetStatus()
-		if err != nil {
-			return err
-		}
-		fmt.Printf("Daemon Status:\n")
-		fmt.Printf("  PID: %d\n", status.PID)
-		fmt.Printf("  Project: %s\n", status.ProjectRoot)
-		fmt.Printf("  Uptime: %s\n", status.Uptime)
-		fmt.Printf("  Requests: %d\n", status.TotalRequests)
-		fmt.Printf("  Connections: %d\n", status.Connections)
-
-	case "shutdown":
-		if err := client.Shutdown(); err != nil {
-			return err
-		}
-		fmt.Println("Daemon shutdown initiated")
-
-	default:
-		return fmt.Errorf("unknown command: %s", config.Command)
-	}
+	fmt.Print(output)
 
 	return nil
 }
