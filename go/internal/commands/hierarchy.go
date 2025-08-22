@@ -35,7 +35,7 @@ func Hierarchy(client *lsp.ClangdClient, className string, limit int, log logger
 		// Multiple classes with same name, show all locations
 		var locations []string
 		for _, sym := range classSymbols {
-			locationStr := formatLocationSimple(client, strings.TrimPrefix(sym.Location.URI, "file://"), sym.Location.Range.Start.Line)
+			locationStr := formatLocationSimple(client, sym.Location.URI, sym.Location.Range.Start.Line)
 			locations = append(locations, fmt.Sprintf("  - %s", locationStr))
 		}
 		return fmt.Sprintf("Multiple classes named '%s' found:\n%s\n\nPlease use a more specific query.", 
@@ -169,7 +169,7 @@ func formatHierarchyTree(tree *HierarchyNode, client *lsp.ClangdClient) string {
 	}
 	
 	// Show the main class
-	mainClassLocation := formatLocationSimple(client, strings.TrimPrefix(tree.Item.URI, "file://"), tree.Item.Range.Start.Line)
+	mainClassLocation := formatHierarchyItemLocation(client, tree.Item)
 	detail := ""
 	if tree.Item.Detail != "" {
 		detail = " " + tree.Item.Detail
@@ -193,7 +193,7 @@ func formatSupertypes(nodes []HierarchyNode, lines *[]string, client *lsp.Clangd
 			connector = "└── "
 		}
 		
-		location := formatLocationSimple(client, strings.TrimPrefix(node.Item.URI, "file://"), node.Item.Range.Start.Line)
+		location := formatHierarchyItemLocation(client, node.Item)
 		detail := ""
 		if node.Item.Detail != "" {
 			detail = " " + node.Item.Detail
@@ -223,7 +223,7 @@ func formatSubtypes(nodes []HierarchyNode, lines *[]string, client *lsp.ClangdCl
 			connector = "└── "
 		}
 		
-		location := formatLocationSimple(client, strings.TrimPrefix(node.Item.URI, "file://"), node.Item.Range.Start.Line)
+		location := formatHierarchyItemLocation(client, node.Item)
 		detail := ""
 		if node.Item.Detail != "" {
 			detail = " " + node.Item.Detail

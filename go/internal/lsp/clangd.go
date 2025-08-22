@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -29,6 +30,58 @@ type ClangdClient struct {
 	capabilities  *ServerCapabilities
 	timeout       time.Duration
 	logger        logger.Logger
+}
+
+// Path helper methods
+
+// Converts a relative or absolute file path to an absolute path based on the project root.
+// If the path is already absolute, it returns the path unchanged.
+func (c *ClangdClient) ToAbsolutePath(relativePath string) string {
+	if filepath.IsAbs(relativePath) {
+		return relativePath
+	}
+	return filepath.Join(c.ProjectRoot, relativePath)
+}
+
+// Converts an absolute path to a relative path based on the project root.
+// If the path cannot be made relative, it returns the absolute path.
+func (c *ClangdClient) ToRelativePath(absolutePath string) string {
+	rel, err := filepath.Rel(c.ProjectRoot, absolutePath)
+	if err != nil {
+		return absolutePath
+	}
+	return rel
+}
+
+// Converts a file path to a proper file URI.
+// The path is first converted to an absolute path if needed.
+func (c *ClangdClient) FileURIFromPath(filePath string) string {
+	absolutePath := c.ToAbsolutePath(filePath)
+	// Properly encode the path as a file URI
+	u := &url.URL{
+		Scheme: "file",
+		Path:   absolutePath,
+	}
+	return u.String()
+}
+
+// Extracts the file path from a file URI.
+// Properly handles URL encoding (e.g., %20 for spaces, %2B for +).
+func (c *ClangdClient) PathFromFileURI(uri string) string {
+	if !strings.HasPrefix(uri, "file://") {
+		// Not a file URI, return as-is
+		return uri
+	}
+	
+	// Parse the URI to properly decode it
+	u, err := url.Parse(uri)
+	if err != nil {
+		// Fallback to simple trimming if parsing fails
+		return strings.TrimPrefix(uri, "file://")
+	}
+	
+	// The path is already decoded by url.Parse
+	return u.Path
 }
 
 // NewClangdClient creates and initializes a new clangd client
@@ -109,7 +162,7 @@ func (c *ClangdClient) initialize() error {
 	pid := os.Getpid()
 	params := InitializeParams{
 		ProcessID: &pid,
-		RootURI:   "file://" + c.ProjectRoot,
+		RootURI:   c.FileURIFromPath(c.ProjectRoot),
 		Capabilities: ClientCapabilities{
 			TextDocument: TextDocumentClientCapabilities{
 				Synchronization: TextDocumentSyncClientCapabilities{
@@ -179,7 +232,7 @@ func (c *ClangdClient) initialize() error {
 	// This is required for workspace/symbol queries to work
 	// See: https://github.com/clangd/clangd/discussions/1339
 	if firstFile := c.getFirstSourceFile(); firstFile != "" {
-		if err := c.OpenDocument("file://" + firstFile); err != nil {
+		if err := c.OpenDocument(c.FileURIFromPath(firstFile)); err != nil {
 			// Log but don't fail - indexing may still work
 			c.logger.Info("Warning: Failed to open first source file: %v", err)
 		}
@@ -284,7 +337,7 @@ func (c *ClangdClient) OpenDocument(uri string) error {
 	c.docMu.Unlock()
 
 	// Read file content
-	path := strings.TrimPrefix(uri, "file://")
+	path := c.PathFromFileURI(uri)
 	content, err := os.ReadFile(path)
 	if err != nil {
 		c.docMu.Lock()
@@ -584,7 +637,7 @@ func (c *ClangdClient) GetSubtypes(item TypeHierarchyItem) ([]TypeHierarchyItem,
 func (c *ClangdClient) OnFilesChanged(files []string) {
 	// Implement the close/reopen workaround for reindexing
 	for _, file := range files {
-		uri := "file://" + file
+		uri := c.FileURIFromPath(file)
 
 		c.docMu.RLock()
 		isOpen := c.openDocuments[uri]
@@ -601,7 +654,7 @@ func (c *ClangdClient) OnFilesChanged(files []string) {
 	events := make([]FileEvent, len(files))
 	for i, file := range files {
 		events[i] = FileEvent{
-			URI:  "file://" + file,
+			URI:  c.FileURIFromPath(file),
 			Type: FileChangeTypeChanged,
 		}
 	}

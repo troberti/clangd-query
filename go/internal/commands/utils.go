@@ -2,13 +2,13 @@ package commands
 
 import (
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	"clangd-query/internal/lsp"
 )
 
-// formatMultiWordQueryHint generates a helpful hint message for multi-word queries
+// Generates a helpful hint message when a user searches for multiple words.
+// This function provides guidance on how to properly use single-word symbol searches
 func formatMultiWordQueryHint(query string, commandName string) string {
 	words := strings.Fields(query)
 	firstWord := words[0]
@@ -27,7 +27,8 @@ func formatMultiWordQueryHint(query string, commandName string) string {
 	return hint
 }
 
-// getSymbolTypePrefix returns a human-readable type prefix for a symbol
+// Returns a human-readable type prefix (like "class" or "enum") for a given symbol kind.
+// This is used when displaying search results to provide context about the symbol type
 func getSymbolTypePrefix(kind lsp.SymbolKind) string {
 	switch kind {
 	case lsp.SymbolKindClass:
@@ -51,7 +52,8 @@ func getSymbolTypePrefix(kind lsp.SymbolKind) string {
 	}
 }
 
-// extractBaseName removes parameters from a symbol name but keeps parentheses for functions
+// Removes parameter lists from a symbol name while preserving parentheses for functions.
+// For example, "foo(int, char)" becomes "foo()" to simplify display
 func extractBaseName(name string) string {
 	if idx := strings.Index(name, "("); idx != -1 {
 		return name[:idx] + "()"
@@ -59,7 +61,8 @@ func extractBaseName(name string) string {
 	return name
 }
 
-// formatSymbolForDisplay formats a symbol with its qualified name
+// Formats a workspace symbol with its fully qualified name including any container.
+// Combines the container name and base name with "::" separator for C++ style
 func formatSymbolForDisplay(symbol lsp.WorkspaceSymbol) string {
 	baseName := extractBaseName(symbol.Name)
 	if symbol.ContainerName != "" {
@@ -68,7 +71,8 @@ func formatSymbolForDisplay(symbol lsp.WorkspaceSymbol) string {
 	return baseName
 }
 
-// formatSymbolWithType formats a symbol with type prefix and qualified name
+// Formats a workspace symbol with both its type prefix and fully qualified name.
+// For example, a class Foo in namespace Bar becomes "class Bar::Foo"
 func formatSymbolWithType(symbol lsp.WorkspaceSymbol) string {
 	qualifiedName := formatSymbolForDisplay(symbol)
 	prefix := getSymbolTypePrefix(symbol.Kind)
@@ -78,8 +82,9 @@ func formatSymbolWithType(symbol lsp.WorkspaceSymbol) string {
 	return qualifiedName
 }
 
-// wordWrap wraps text to fit within a maximum line width
-// Preserves paragraph breaks (empty lines)
+// Wraps text to fit within a maximum line width while preserving paragraph breaks.
+// Empty lines in the input are maintained as paragraph separators in the output.
+// Words that would exceed the line width are moved to the next line
 func wordWrap(text string, maxWidth int) []string {
 	var lines []string
 	paragraphs := strings.Split(text, "\n")
@@ -119,34 +124,44 @@ func wordWrap(text string, maxWidth int) []string {
 	return lines
 }
 
-// formatLocation formats a location (with file, line, and column) for display
-// Converts URI to relative path and uses 1-based indexing for editor compatibility
+// Formats a complete location with file path, line, and column numbers for display.
+// The URI is converted to a relative path from the project root, and line/column
+// numbers are converted from 0-based to 1-based indexing for editor compatibility
 func formatLocation(client *lsp.ClangdClient, location lsp.Location) string {
 	// Extract path from URI
-	path := strings.TrimPrefix(location.URI, "file://")
+	absolutePath := client.PathFromFileURI(location.URI)
 	
 	// Make path relative
-	if relPath, err := filepath.Rel(client.ProjectRoot, path); err == nil {
-		path = relPath
-	}
+	relativePath := client.ToRelativePath(absolutePath)
 	
 	// Format with 1-based line and column numbers
-	return fmt.Sprintf("%s:%d:%d", path, 
+	return fmt.Sprintf("%s:%d:%d", relativePath, 
 		location.Range.Start.Line+1, 
 		location.Range.Start.Character+1)
 }
 
-// formatLocationSimple formats a file path and line number for display  
-// Used when we only have path and line (no column shown)
-func formatLocationSimple(client *lsp.ClangdClient, path string, line int) string {
+// Formats a file location with just the path and line number (no column).
+// This simpler format is used when column information is not relevant or available.
+// The URI is converted to a relative path and the line number to 1-based indexing
+func formatLocationSimple(client *lsp.ClangdClient, uri string, line int) string {
+	// Convert URI to path
+	absolutePath := client.PathFromFileURI(uri)
 	// Make path relative
-	if relPath, err := filepath.Rel(client.ProjectRoot, path); err == nil {
-		path = relPath
-	}
-	return fmt.Sprintf("%s:%d", path, line+1)
+	relativePath := client.ToRelativePath(absolutePath)
+	return fmt.Sprintf("%s:%d", relativePath, line+1)
 }
 
-// SymbolKindToString converts SymbolKind enum to human-readable string
+// Formats the location of a type hierarchy item for display in command output.
+// This convenience function extracts the URI and line information from a TypeHierarchyItem
+// and formats it as a relative path with line number (e.g., "src/foo.cpp:42").
+// The function is primarily used by the hierarchy command to consistently format
+// locations of base classes, derived classes, and the main class being analyzed.
+func formatHierarchyItemLocation(client *lsp.ClangdClient, item lsp.TypeHierarchyItem) string {
+	return formatLocationSimple(client, item.URI, item.Range.Start.Line)
+}
+
+// Converts a SymbolKind enum value to its human-readable string representation.
+// Used throughout the codebase to display symbol types in command output
 func SymbolKindToString(kind lsp.SymbolKind) string {
 	switch kind {
 	case lsp.SymbolKindFile:

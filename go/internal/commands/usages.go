@@ -2,7 +2,6 @@ package commands
 
 import (
 	"fmt"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -45,11 +44,9 @@ func findReferencesAtLocation(client *lsp.ClangdClient, file string, line, colum
 	log.Info("Finding references at location: %s", originalLocation)
 	
 	// Convert to absolute path if needed
-	if !filepath.IsAbs(file) {
-		file = filepath.Join(client.ProjectRoot, file)
-	}
+	absolutePath := client.ToAbsolutePath(file)
 	
-	uri := "file://" + file
+	uri := client.FileURIFromPath(absolutePath)
 	position := lsp.Position{
 		Line:      line - 1, // Convert to 0-based
 		Character: column - 1,

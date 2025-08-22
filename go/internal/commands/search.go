@@ -2,7 +2,6 @@ package commands
 
 import (
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	"clangd-query/internal/logger"
@@ -45,17 +44,15 @@ func Search(client *lsp.ClangdClient, query string, limit int, log logger.Logger
 		// Build the fully qualified name with type prefix
 		fullName := formatSymbolWithType(symbol)
 
-		// Get relative path
-		absolutePath := strings.TrimPrefix(symbol.Location.URI, "file://")
-		// Make path relative if possible
-		if relPath, err := filepath.Rel(client.ProjectRoot, absolutePath); err == nil {
-			absolutePath = relPath
-		}
+		// Get absolute path from URI
+		absolutePath := client.PathFromFileURI(symbol.Location.URI)
+		// Convert to relative path for display
+		relativePath := client.ToRelativePath(absolutePath)
 		
 		// Format location
 		line := symbol.Location.Range.Start.Line + 1      // Convert to 1-based
 		column := symbol.Location.Range.Start.Character + 1
-		formattedLocation := fmt.Sprintf("%s:%d:%d", absolutePath, line, column)
+		formattedLocation := fmt.Sprintf("%s:%d:%d", relativePath, line, column)
 
 		// Format with bullet point, backticks, and "at" prefix
 		output += fmt.Sprintf("- `%s` at %s\n", fullName, formattedLocation)

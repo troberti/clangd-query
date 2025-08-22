@@ -33,7 +33,7 @@ func Show(client *lsp.ClangdClient, query string, log logger.Logger) (string, er
 	fullName := formatSymbolForDisplay(symbol)
 
 	// Get the symbol's location
-	symbolPath := strings.TrimPrefix(symbol.Location.URI, "file://")
+	symbolPath := client.PathFromFileURI(symbol.Location.URI)
 	
 	log.Debug("Found %s '%s' at %s", symbolKindName, fullName, symbolPath)
 
@@ -78,7 +78,7 @@ func Show(client *lsp.ClangdClient, query string, log logger.Logger) (string, er
 
 			// Add the other location(s) if different from current
 			for _, def := range definitions {
-				defPath := strings.TrimPrefix(def.URI, "file://")
+				defPath := client.PathFromFileURI(def.URI)
 
 				// Skip if it's the same location
 				if defPath == symbolPath && 

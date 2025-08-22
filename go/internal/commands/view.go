@@ -32,7 +32,7 @@ func View(client *lsp.ClangdClient, query string, log logger.Logger) (string, er
 	symbol := symbols[0]
 
 	// Get the file path
-	filePath := strings.TrimPrefix(symbol.Location.URI, "file://")
+	filePath := client.PathFromFileURI(symbol.Location.URI)
 	
 	// Find the symbol line first
 	symbolLine := symbol.Location.Range.Start.Line
