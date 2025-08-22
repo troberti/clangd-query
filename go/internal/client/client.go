@@ -137,10 +137,10 @@ func (c *Client) callCommand(method string, params map[string]interface{}) (stri
 }
 
 // Search searches for symbols
-func (c *Client) Search(query string, limit int) (string, error) {
+func (c *Client) Search(symbol string, limit int) (string, error) {
 	return c.callCommand("search", map[string]interface{}{
-		"query": query,  // Keep "query" for search since it's a search query, not a symbol
-		"limit": limit,
+		"symbol": symbol,
+		"limit":  limit,
 	})
 }
 
@@ -292,7 +292,7 @@ func Run(config *Config) error {
 		if err := startDaemon(projectRoot, config.Verbose); err != nil {
 			return fmt.Errorf("failed to start daemon: %v", err)
 		}
-		
+
 		// Re-read lock file
 		lockInfo, err = daemon.ReadLockFile(projectRoot)
 		if err != nil || lockInfo == nil {
@@ -444,7 +444,7 @@ func startDaemon(projectRoot string, verbose bool) error {
 		args = append(args, "--verbose")
 	}
 	cmd := exec.Command(execPath, args...)
-	
+
 	// Detach from current process group
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Setpgid: true,
