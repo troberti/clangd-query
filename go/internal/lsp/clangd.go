@@ -72,14 +72,14 @@ func (c *ClangdClient) PathFromFileURI(uri string) string {
 		// Not a file URI, return as-is
 		return uri
 	}
-	
+
 	// Parse the URI to properly decode it
 	u, err := url.Parse(uri)
 	if err != nil {
 		// Fallback to simple trimming if parsing fails
 		return strings.TrimPrefix(uri, "file://")
 	}
-	
+
 	// The path is already decoded by url.Parse
 	return u.Path
 }
@@ -110,7 +110,6 @@ func NewClangdClient(projectRoot, buildDir string, log logger.Logger) (*ClangdCl
 	if err != nil {
 		return nil, err
 	}
-
 
 	stdinPipe, err := cmd.StdinPipe()
 	if err != nil {
@@ -232,10 +231,15 @@ func (c *ClangdClient) initialize() error {
 	// This is required for workspace/symbol queries to work
 	// See: https://github.com/clangd/clangd/discussions/1339
 	if firstFile := c.getFirstSourceFile(); firstFile != "" {
+		c.logger.Debug("Opening initial file to trigger indexing: %s", firstFile)
 		if err := c.OpenDocument(c.FileURIFromPath(firstFile)); err != nil {
 			// Log but don't fail - indexing may still work
-			c.logger.Info("Warning: Failed to open first source file: %v", err)
+			c.logger.Info("Warning: Failed to open initial source file %s: %v", firstFile, err)
+		} else {
+			c.logger.Info("Successfully opened initial file for indexing: %s", firstFile)
 		}
+	} else {
+		c.logger.Info("Warning: No source file found to trigger initial indexing - workspace/symbol queries may not work")
 	}
 
 	// Set indexing timeout
@@ -677,13 +681,19 @@ func (c *ClangdClient) Exit() error {
 	return c.transport.SendNotification("exit", ExitParams{})
 }
 
-// getFirstSourceFile reads the first source file from compile_commands.json
-// This is needed to trigger indexing in clangd
+// Reads the first suitable source file from compile_commands.json to trigger
+// clangd indexing. This is necessary for workspace/symbol queries to work properly.
+// The function prefers implementation files (.cc, .cpp) over headers to ensure
+// better indexing coverage. Returns an empty string if no suitable file is found.
 func (c *ClangdClient) getFirstSourceFile() string {
 	compileCommandsPath := filepath.Join(c.buildDir, "compile_commands.json")
-
 	data, err := os.ReadFile(compileCommandsPath)
 	if err != nil {
+		if os.IsNotExist(err) {
+			c.logger.Error("compile_commands.json not found at %s - indexing may not work properly", compileCommandsPath)
+		} else {
+			c.logger.Error("Failed to read compile_commands.json: %v", err)
+		}
 		return ""
 	}
 
@@ -692,22 +702,27 @@ func (c *ClangdClient) getFirstSourceFile() string {
 	}
 
 	if err := json.Unmarshal(data, &commands); err != nil {
+		c.logger.Error("Failed to parse compile_commands.json: %v", err)
+		return ""
+	}
+
+	if len(commands) == 0 {
+		c.logger.Info("Warning: compile_commands.json is empty - no files to index")
 		return ""
 	}
 
 	// Find the first .cc or .cpp file (skip headers)
 	for _, cmd := range commands {
 		if strings.HasSuffix(cmd.File, ".cc") || strings.HasSuffix(cmd.File, ".cpp") {
+			c.logger.Info("Selected source file for initial indexing: %s", cmd.File)
 			return cmd.File
 		}
 	}
 
 	// If no implementation files found, just use the first file
-	if len(commands) > 0 {
-		return commands[0].File
-	}
-
-	return ""
+	firstFile := commands[0].File
+	c.logger.Info("No .cc/.cpp files found, using first file for indexing: %s", firstFile)
+	return firstFile
 }
 
 // Stop stops the clangd process
@@ -806,16 +821,16 @@ func (c *ClangdClient) GetDocumentation(uri string, position Position) (*ParsedD
 	if hover == nil || hover.Contents.Value == "" {
 		return nil, nil
 	}
-	
+
 	// Log the raw hover content for debugging
 	c.logger.Debug("Raw hover content:\n%s", hover.Contents.Value)
-	
+
 	parsed := parseDocumentation(hover.Contents.Value)
-	
+
 	// Log what we parsed
-	c.logger.Debug("Parsed: AccessLevel='%s', Signature='%s', ReturnType='%s'", 
+	c.logger.Debug("Parsed: AccessLevel='%s', Signature='%s', ReturnType='%s'",
 		parsed.AccessLevel, parsed.Signature, parsed.ReturnType)
-	
+
 	return parsed, nil
 }
 
@@ -828,7 +843,7 @@ func parseDocumentation(content string) *ParsedDocumentation {
 	doc := &ParsedDocumentation{
 		raw: content,
 	}
-	
+
 	// Extract code block if present
 	codeBlock := ""
 	if idx := strings.Index(content, "```"); idx >= 0 {
@@ -838,26 +853,26 @@ func parseDocumentation(content string) *ParsedDocumentation {
 			start += nlIdx + 1
 		}
 		if endIdx := strings.Index(content[start:], "```"); endIdx >= 0 {
-			codeBlock = strings.TrimSpace(content[start:start+endIdx])
+			codeBlock = strings.TrimSpace(content[start : start+endIdx])
 		}
 	}
-	
+
 	// Parse code block for signature and modifiers
 	if codeBlock != "" {
 		lines := strings.Split(codeBlock, "\n")
-		
+
 		// Sometimes clangd returns the signature on multiple lines
 		// e.g., "public:\n  virtual void Update(...)"
 		// We need to handle this case properly
-		
+
 		for i, line := range lines {
 			line = strings.TrimSpace(line)
-			
+
 			// Skip context lines
 			if strings.HasPrefix(line, "// In ") {
 				continue
 			}
-			
+
 			// Check for access level on its own line
 			if line == "public:" || line == "private:" || line == "protected:" {
 				doc.AccessLevel = strings.TrimSuffix(line, ":")
@@ -889,7 +904,7 @@ func parseDocumentation(content string) *ParsedDocumentation {
 				}
 				continue
 			}
-			
+
 			// Check if line starts with access level (e.g., "public: virtual void...")
 			if strings.HasPrefix(line, "public: ") {
 				doc.AccessLevel = "public"
@@ -901,7 +916,7 @@ func parseDocumentation(content string) *ParsedDocumentation {
 				doc.AccessLevel = "protected"
 				line = strings.TrimPrefix(line, "protected: ")
 			}
-			
+
 			// This is likely the signature (if we haven't found it yet)
 			if doc.Signature == "" && line != "" && !strings.HasSuffix(line, ":") {
 				// Remove access level prefix if present in the signature
@@ -913,7 +928,7 @@ func parseDocumentation(content string) *ParsedDocumentation {
 				} else if strings.HasPrefix(line, "protected: ") {
 					signatureLine = strings.TrimPrefix(line, "protected: ")
 				}
-				
+
 				// Check if this is a template declaration
 				if strings.HasPrefix(signatureLine, "template") && strings.HasSuffix(signatureLine, ">") {
 					// This is a template, look for the actual method signature on the next line
@@ -935,45 +950,45 @@ func parseDocumentation(content string) *ParsedDocumentation {
 			}
 		}
 	}
-	
+
 	// Extract documentation text from content
 	// Parse content line by line to extract various pieces of information
 	lines := strings.Split(content, "\n")
 	var descLines []string
 	inParameters := false
-	
+
 	for _, line := range lines {
 		// Stop processing if we hit the code block
 		if strings.HasPrefix(line, "```") {
 			break
 		}
-		
+
 		line = strings.TrimSpace(line)
-		
+
 		// Skip empty lines and separator lines
 		if line == "" || line == "---" {
 			continue
 		}
-		
+
 		// Skip header lines
 		if strings.HasPrefix(line, "###") || strings.HasPrefix(line, "provided by") {
 			continue
 		}
-		
+
 		// Extract Type field for variables/fields
 		if strings.HasPrefix(line, "Type:") {
 			typeStr := strings.TrimSpace(strings.TrimPrefix(line, "Type:"))
 			doc.Type = strings.Trim(typeStr, "`")
 			continue
 		}
-		
+
 		// Skip other technical details
 		if strings.HasPrefix(line, "Size:") ||
-		   strings.HasPrefix(line, "Offset:") ||
-		   strings.Contains(line, "alignment") {
+			strings.HasPrefix(line, "Offset:") ||
+			strings.Contains(line, "alignment") {
 			continue
 		}
-		
+
 		// Check for return type indicator
 		if strings.HasPrefix(line, "→") {
 			if doc.ReturnType == "" {
@@ -982,14 +997,14 @@ func parseDocumentation(content string) *ParsedDocumentation {
 			}
 			continue
 		}
-		
+
 		// Check for Parameters section
 		if strings.HasPrefix(line, "Parameters:") {
 			inParameters = true
 			doc.ParametersText = "Parameters:"
 			continue
 		}
-		
+
 		// Handle parameter lines (they start with -)
 		if inParameters && strings.HasPrefix(line, "-") {
 			doc.ParametersText += "\n  " + line
@@ -998,25 +1013,25 @@ func parseDocumentation(content string) *ParsedDocumentation {
 			// End of parameters section
 			inParameters = false
 		}
-		
+
 		// Documentation lines (@brief, @param, etc. or just plain text)
 		if strings.HasPrefix(line, "@") || (!inParameters && line != "") {
 			descLines = append(descLines, line)
 		}
 	}
-	
+
 	// Join description lines
 	if len(descLines) > 0 {
 		doc.Description = strings.Join(descLines, " ")
 	}
-	
+
 	return doc
 }
 
 // extractModifiers extracts C++ modifiers from a signature line
 func extractModifiers(line string) []string {
 	var modifiers []string
-	
+
 	// For const, only consider it a modifier if it appears after the closing parenthesis
 	// (i.e., it's a const member function)
 	if parenIdx := strings.LastIndex(line, ")"); parenIdx >= 0 {
@@ -1025,11 +1040,11 @@ func extractModifiers(line string) []string {
 			modifiers = append(modifiers, "const")
 		}
 	}
-	
+
 	// Other modifiers can appear anywhere in the signature
 	// but we should be smarter about word boundaries
 	modifierKeywords := []string{"virtual", "static", "override", "inline", "explicit", "noexcept"}
-	
+
 	// Split into words to check for exact matches
 	words := strings.Fields(line)
 	for _, word := range words {
@@ -1042,12 +1057,12 @@ func extractModifiers(line string) []string {
 			}
 		}
 	}
-	
+
 	// Check for pure virtual
 	if strings.Contains(line, "= 0") {
 		modifiers = append(modifiers, "pure virtual")
 	}
-	
+
 	// Check for deleted/defaulted
 	if strings.Contains(line, "= delete") {
 		modifiers = append(modifiers, "deleted")
@@ -1055,7 +1070,7 @@ func extractModifiers(line string) []string {
 	if strings.Contains(line, "= default") {
 		modifiers = append(modifiers, "defaulted")
 	}
-	
+
 	return modifiers
 }
 
@@ -1074,18 +1089,18 @@ func isModifier(word string) bool {
 func extractSignatureDetails(signature string, doc *ParsedDocumentation) {
 	// Extract modifiers
 	doc.Modifiers = extractModifiers(signature)
-	
+
 	// Extract return type and parameters if it's a function
 	if strings.Contains(signature, "(") {
 		parenIdx := strings.Index(signature, "(")
 		beforeParen := signature[:parenIdx]
-		
+
 		// Check if this is a constructor or destructor (they don't have return types)
 		// Constructors/destructors contain the class name right before the parenthesis
 		// and don't have a separate return type
 		parts := strings.Fields(beforeParen)
 		isConstructorOrDestructor := false
-		
+
 		// Check for destructor (starts with ~) or constructor (class name before parenthesis)
 		if len(parts) > 0 {
 			lastPart := parts[len(parts)-1]
@@ -1107,7 +1122,7 @@ func extractSignatureDetails(signature string, doc *ParsedDocumentation) {
 				}
 			}
 		}
-		
+
 		// Only extract return type if it's not a constructor/destructor
 		// and if ReturnType hasn't already been set (e.g., from the → line)
 		if !isConstructorOrDestructor && doc.ReturnType == "" {
@@ -1120,7 +1135,7 @@ func extractSignatureDetails(signature string, doc *ParsedDocumentation) {
 				}
 			}
 		}
-		
+
 		// Extract parameters
 		if closeIdx := strings.Index(signature[parenIdx:], ")"); closeIdx > 0 {
 			paramStr := signature[parenIdx+1 : parenIdx+closeIdx]
@@ -1147,17 +1162,17 @@ func formatSignature(signature string) string {
 	if strings.Contains(signature, "\n") {
 		return signature // Keep multiline signatures as-is for now
 	}
-	
+
 	// First, normalize spaces around & and *
 	// Replace patterns like "Type &" with "Type&" and "Type *" with "Type*"
 	result := signature
-	
+
 	// Handle references - move & next to the type but keep space after for names
 	result = strings.ReplaceAll(result, " &", "&")
-	
+
 	// Handle pointers - move * next to the type but keep space after for names
 	result = strings.ReplaceAll(result, " *", "*")
-	
+
 	// Now we need to ensure there's a space between Type& and the next identifier
 	// We'll process the signature to add spaces where needed
 	finalResult := ""
@@ -1177,12 +1192,12 @@ func formatSignature(signature string) string {
 			i++
 		}
 	}
-	
+
 	return finalResult
 }
 
 // isIdentifierChar checks if a character can be part of a C++ identifier
 func isIdentifierChar(ch byte) bool {
-	return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || 
-	       (ch >= '0' && ch <= '9') || ch == '_'
+	return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') ||
+		(ch >= '0' && ch <= '9') || ch == '_'
 }
