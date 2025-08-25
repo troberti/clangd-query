@@ -346,7 +346,7 @@ func Run(config *Config) error {
 	if err != nil {
 		return err
 	}
-	fmt.Print(output)
+	fmt.Println(output)
 
 	return nil
 }
