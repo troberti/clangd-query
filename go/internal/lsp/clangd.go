@@ -746,31 +746,6 @@ func (c *ClangdClient) Stop() error {
 	}
 }
 
-// ReadFileLines reads specific lines from a file
-func ReadFileLines(path string, startLine, endLine int) ([]string, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	var lines []string
-	scanner := bufio.NewScanner(file)
-	lineNum := 0
-
-	for scanner.Scan() {
-		if lineNum >= startLine && lineNum <= endLine {
-			lines = append(lines, scanner.Text())
-		}
-		lineNum++
-		if lineNum > endLine {
-			break
-		}
-	}
-
-	return lines, scanner.Err()
-}
-
 // parseClangdLogs reads clangd's stderr and logs it with appropriate levels
 func (c *ClangdClient) parseClangdLogs(stderr io.Reader) {
 	scanner := bufio.NewScanner(stderr)
