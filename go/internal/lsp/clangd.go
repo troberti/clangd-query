@@ -132,9 +132,11 @@ func NewClangdClient(projectRoot, buildDir string, log logger.Logger) (*ClangdCl
 		return nil, fmt.Errorf("failed to start clangd: %v", err)
 	}
 
+	transport := NewTransport(stdoutPipe, stdinPipe, os.Stderr)
+
 	client := &ClangdClient{
 		cmd:           cmd,
-		transport:     NewTransport(stdoutPipe, stdinPipe, os.Stderr),
+		transport:     transport,
 		ProjectRoot:   projectRoot,
 		buildDir:      buildDir,
 		indexingDone:  make(chan struct{}),
@@ -315,27 +317,16 @@ func (c *ClangdClient) WaitForIndexing() {
 	}
 }
 
-// sendRequest sends a request to clangd with timeout
+// Sends a request to clangd and waits for the response.
+// The underlying transport handles timeouts (30 seconds by default), so this method
+// will not block indefinitely. If the connection to clangd is lost, this method
+// returns an error immediately rather than attempting to reconnect.
 func (c *ClangdClient) sendRequest(method string, params interface{}) (json.RawMessage, error) {
-	resultChan := make(chan struct {
-		result json.RawMessage
-		err    error
-	}, 1)
-
-	go func() {
-		result, err := c.transport.SendRequest(method, params)
-		resultChan <- struct {
-			result json.RawMessage
-			err    error
-		}{result, err}
-	}()
-
-	select {
-	case res := <-resultChan:
-		return res.result, res.err
-	case <-time.After(c.timeout):
-		return nil, fmt.Errorf("request timeout after %v", c.timeout)
+	result, err := c.transport.SendRequest(method, params)
+	if err != nil {
+		c.logger.Error("Request %s failed: %v", method, err)
 	}
+	return result, err
 }
 
 // OpenDocument opens a document in clangd

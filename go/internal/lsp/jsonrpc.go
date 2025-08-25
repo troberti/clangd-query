@@ -3,16 +3,18 @@ package lsp
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
-// JSON-RPC 2.0 message types
-
+// Request represents a JSON-RPC 2.0 request message that expects a response.
+// Requests always have an ID field that correlates the response back to the request.
 type Request struct {
 	Jsonrpc string          `json:"jsonrpc"`
 	ID      interface{}     `json:"id"`
@@ -20,6 +22,9 @@ type Request struct {
 	Params  json.RawMessage `json:"params,omitempty"`
 }
 
+// Response represents a JSON-RPC 2.0 response message.
+// Every response includes the ID from the original request for correlation.
+// Either Result or Error will be set, but never both.
 type Response struct {
 	Jsonrpc string          `json:"jsonrpc"`
 	ID      interface{}     `json:"id"`
@@ -27,67 +32,106 @@ type Response struct {
 	Error   *Error          `json:"error,omitempty"`
 }
 
+// Notification represents a JSON-RPC 2.0 notification message.
+// Notifications are fire-and-forget messages that don't expect a response.
+// They lack an ID field, which distinguishes them from requests.
 type Notification struct {
 	Jsonrpc string          `json:"jsonrpc"`
 	Method  string          `json:"method"`
 	Params  json.RawMessage `json:"params,omitempty"`
 }
 
+// Error represents a JSON-RPC 2.0 error object returned in a response.
+// The Code field uses standard JSON-RPC error codes when applicable.
 type Error struct {
 	Code    int             `json:"code"`
 	Message string          `json:"message"`
 	Data    json.RawMessage `json:"data,omitempty"`
 }
 
-// Standard JSON-RPC error codes
+// Standard JSON-RPC 2.0 error codes as defined in the specification.
+// These codes indicate protocol-level errors rather than application errors.
 const (
-	ParseError     = -32700
-	InvalidRequest = -32600
-	MethodNotFound = -32601
-	InvalidParams  = -32602
-	InternalError  = -32603
+	ParseError     = -32700 // Invalid JSON was received
+	InvalidRequest = -32600 // JSON is not a valid Request object
+	MethodNotFound = -32601 // Method does not exist or is not available
+	InvalidParams  = -32602 // Invalid method parameters
+	InternalError  = -32603 // Internal JSON-RPC error
 )
 
-// Transport handles reading and writing JSON-RPC messages over stdio
+// Common transport errors that can occur during JSON-RPC communication.
+// These are transport-level errors, distinct from JSON-RPC protocol errors.
+var (
+	ErrConnectionClosed = errors.New("connection closed")
+	ErrTimeout          = errors.New("request timeout")
+)
+
+// Transport manages synchronous JSON-RPC 2.0 communication over stdin/stdout.
+// It implements a simple request-response model where each request blocks until
+// its response is received. This design eliminates complexity around concurrent
+// request tracking while still supporting asynchronous notifications from the server.
+//
+// The transport ensures thread-safety by serializing all requests through a mutex,
+// making it impossible to have response mismatches or race conditions.
 type Transport struct {
-	stdin  io.Reader
-	stdout io.Writer
+	reader *bufio.Reader
+	writer io.Writer
 	stderr io.Writer
 
-	nextID  int64
-	pending map[interface{}]chan *Response
-	mu      sync.Mutex
+	nextID int64      // Atomic counter for generating unique request IDs
+	mu     sync.Mutex // Serializes all requests and protects the closed flag
+	closed bool       // Set to true when the connection fails or closes
 
-	handlers   map[string]NotificationHandler
-	handlersMu sync.RWMutex
+	handlers   map[string]NotificationHandler // Registered handlers for server notifications
+	handlersMu sync.RWMutex                   // Protects the handlers map
 }
 
+// NotificationHandler processes incoming notifications from the server.
+// Handlers are called asynchronously when notifications arrive.
 type NotificationHandler func(params json.RawMessage)
 
+// Creates a new Transport for JSON-RPC communication.
+// The stdin parameter is used for reading responses and notifications,
+// stdout for writing requests and notifications, and stderr for error logging.
 func NewTransport(stdin io.Reader, stdout, stderr io.Writer) *Transport {
 	return &Transport{
-		stdin:    stdin,
-		stdout:   stdout,
+		reader:   bufio.NewReader(stdin),
+		writer:   stdout,
 		stderr:   stderr,
-		pending:  make(map[interface{}]chan *Response),
 		handlers: make(map[string]NotificationHandler),
 	}
 }
 
-// RegisterNotificationHandler registers a handler for notifications
+// Registers a handler for a specific notification method.
+// When a notification with the given method name arrives from the server,
+// the handler will be called asynchronously with the notification parameters.
+// Only one handler can be registered per method; subsequent registrations
+// will replace the previous handler.
 func (t *Transport) RegisterNotificationHandler(method string, handler NotificationHandler) {
 	t.handlersMu.Lock()
 	defer t.handlersMu.Unlock()
 	t.handlers[method] = handler
 }
 
-// SendRequest sends a request and waits for the response
+// Sends a JSON-RPC request and blocks until the response is received.
+// This method is thread-safe and ensures that only one request is in flight at a time.
+// The method automatically generates a unique ID for request correlation and handles
+// timeout (30 seconds) to prevent indefinite blocking. Any notifications received
+// while waiting for the response are dispatched to their registered handlers.
 func (t *Transport) SendRequest(method string, params interface{}) (json.RawMessage, error) {
-	id := atomic.AddInt64(&t.nextID, 1)
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if t.closed {
+		return nil, ErrConnectionClosed
+	}
+
+	// Generate unique string ID to avoid JSON number type ambiguity
+	id := strconv.FormatInt(atomic.AddInt64(&t.nextID, 1), 10)
 
 	paramsJSON, err := json.Marshal(params)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Error encoding request params: %w", err)
 	}
 
 	req := Request{
@@ -97,36 +141,66 @@ func (t *Transport) SendRequest(method string, params interface{}) (json.RawMess
 		Params:  paramsJSON,
 	}
 
-	// Create response channel before sending
-	// Use float64 as key since JSON numbers are parsed as float64
-	respChan := make(chan *Response, 1)
-	t.mu.Lock()
-	t.pending[float64(id)] = respChan
-	t.mu.Unlock()
-
-	// Send request
+	// Write the request to the output stream
 	if err := t.writeMessage(req); err != nil {
-		t.mu.Lock()
-		delete(t.pending, float64(id))
-		t.mu.Unlock()
-		return nil, err
+		t.closed = true
+		return nil, fmt.Errorf("Error writing request: %w", err)
 	}
 
-	// Wait for response
-	resp := <-respChan
-
-	if resp.Error != nil {
-		return nil, fmt.Errorf("RPC error %d: %s", resp.Error.Code, resp.Error.Message)
+	// Read the response in a goroutine to implement timeout
+	type result struct {
+		resp *Response
+		err  error
 	}
+	done := make(chan result, 1)
 
-	return resp.Result, nil
+	go func() {
+		resp, err := t.readResponse(id)
+		select {
+		case done <- result{resp, err}:
+		default:
+			// Timeout already occurred, discard result
+		}
+	}()
+
+	// Block until we get a response or timeout
+	select {
+	case r := <-done:
+		if r.err != nil {
+			if errors.Is(r.err, io.EOF) || errors.Is(r.err, io.ErrUnexpectedEOF) {
+				t.closed = true
+				return nil, ErrConnectionClosed
+			}
+			return nil, r.err
+		}
+
+		if r.resp.Error != nil {
+			return nil, fmt.Errorf("RPC error %d: %s", r.resp.Error.Code, r.resp.Error.Message)
+		}
+
+		return r.resp.Result, nil
+
+	case <-time.After(30 * time.Second):
+		t.closed = true
+		return nil, ErrTimeout
+	}
 }
 
-// SendNotification sends a notification (no response expected)
+// Sends a notification to the server without expecting a response.
+// Notifications are fire-and-forget messages used for events like
+// file opened/closed notifications. This method returns immediately
+// after writing the notification to the output stream.
 func (t *Transport) SendNotification(method string, params interface{}) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if t.closed {
+		return ErrConnectionClosed
+	}
+
 	paramsJSON, err := json.Marshal(params)
 	if err != nil {
-		return err
+		return fmt.Errorf("Error encoding request params: %w", err)
 	}
 
 	notif := Notification{
@@ -135,120 +209,127 @@ func (t *Transport) SendNotification(method string, params interface{}) error {
 		Params:  paramsJSON,
 	}
 
-	return t.writeMessage(notif)
+	if err := t.writeMessage(notif); err != nil {
+		t.closed = true
+		return fmt.Errorf("Error writing notification: %w", err)
+	}
+
+	return nil
 }
 
-// Start begins reading messages from stdin
+// Placeholder for notification reader initialization.
+// In this synchronous implementation, notifications are processed inline
+// while waiting for responses, avoiding the need for a separate reader goroutine.
+// This design prevents reader conflicts and simplifies the implementation.
 func (t *Transport) Start() {
-	go t.readLoop()
+	// Notifications are handled during readResponse, not in a separate goroutine
 }
 
-func (t *Transport) readLoop() {
-	reader := bufio.NewReader(t.stdin)
-
+// Reads messages from the input stream until it finds a response with the expected ID.
+// Any notifications encountered while waiting are dispatched to their handlers.
+// This approach ensures we never miss notifications even while waiting for a response.
+func (t *Transport) readResponse(expectedID string) (*Response, error) {
 	for {
-		// Read headers
-		var contentLength int
-		for {
-			line, err := reader.ReadString('\n')
-			if err != nil {
-				if err != io.EOF {
-					fmt.Fprintf(t.stderr, "Error reading header: %v\n", err)
-				}
-				return
-			}
-
-			line = strings.TrimSpace(line)
-
-			if line == "" {
-				// Empty line marks end of headers
-				break
-			}
-
-			if strings.HasPrefix(line, "Content-Length: ") {
-				lengthStr := strings.TrimPrefix(line, "Content-Length: ")
-				length, err := strconv.Atoi(strings.TrimSpace(lengthStr))
-				if err != nil {
-					fmt.Fprintf(t.stderr, "Invalid Content-Length: %v\n", err)
-					continue
-				}
-				contentLength = length
-			}
-			// Ignore other headers like Content-Type
-		}
-
-		if contentLength == 0 {
-			continue
-		}
-
-		// Read content
-		content := make([]byte, contentLength)
-		n, err := io.ReadFull(reader, content)
+		msg, err := t.readMessage()
 		if err != nil {
-			fmt.Fprintf(t.stderr, "Failed to read message content: %v\n", err)
-			return
-		}
-		if n != contentLength {
-			fmt.Fprintf(t.stderr, "Content length mismatch: expected %d, got %d\n", contentLength, n)
-			continue
+			return nil, err
 		}
 
-		// Parse and handle message
-		t.handleMessage(content)
+		// Found the response we're waiting for
+		if id, ok := msg["id"].(string); ok && id == expectedID {
+			var resp Response
+			data, _ := json.Marshal(msg)
+			if err := json.Unmarshal(data, &resp); err != nil {
+				return nil, fmt.Errorf("Error decoding response: %w", err)
+			}
+			return &resp, nil
+		}
+
+		// Process any notifications that arrive while waiting
+		if msg["id"] == nil && msg["method"] != nil {
+			var notif Notification
+			if data, _ := json.Marshal(msg); data != nil {
+				if err := json.Unmarshal(data, &notif); err == nil {
+					go func() {
+						t.handleNotification(&notif)
+					}()
+				}
+			}
+		}
+		// Ignore responses for other IDs (shouldn't happen in synchronous mode)
 	}
 }
 
-func (t *Transport) handleMessage(content []byte) {
-	// Try to parse as different message types
+// Reads a single JSON-RPC message from the input stream.
+// Messages use HTTP-style headers with Content-Length to frame the JSON payload.
+// This is the standard format used by the Language Server Protocol.
+func (t *Transport) readMessage() (map[string]interface{}, error) {
+	// Parse HTTP-style headers
+	var contentLength int
+	for {
+		line, err := t.reader.ReadString('\n')
+		if err != nil {
+			return nil, err
+		}
+
+		line = strings.TrimSpace(line)
+		if line == "" {
+			break // Empty line indicates end of headers
+		}
+
+		if strings.HasPrefix(line, "Content-Length: ") {
+			lengthStr := strings.TrimPrefix(line, "Content-Length: ")
+			length, err := strconv.Atoi(strings.TrimSpace(lengthStr))
+			if err != nil {
+				return nil, fmt.Errorf("invalid Content-Length: %w", err)
+			}
+			// Sanity check: messages shouldn't be larger than 10MB
+			if length < 0 || length > 10*1024*1024 {
+				return nil, fmt.Errorf("invalid Content-Length %d: must be between 0 and 10MB", length)
+			}
+			contentLength = length
+		}
+	}
+
+	if contentLength == 0 {
+		return nil, errors.New("missing Content-Length header")
+	}
+
+	// Read the JSON payload based on Content-Length
+	content := make([]byte, contentLength)
+	n, err := io.ReadFull(t.reader, content)
+	if err != nil {
+		return nil, err
+	}
+	if n != contentLength {
+		return nil, fmt.Errorf("content length mismatch: expected %d, got %d", contentLength, n)
+	}
+
+	// Unmarshal into generic map to determine message type
 	var msg map[string]interface{}
 	if err := json.Unmarshal(content, &msg); err != nil {
-		fmt.Fprintf(t.stderr, "Failed to parse message: %v\n", err)
-		return
+		return nil, fmt.Errorf("parse message: %w", err)
 	}
 
-	// Check if it's a response (has id but no method)
-	if id, hasID := msg["id"]; hasID {
-		if _, hasMethod := msg["method"]; !hasMethod {
-			// It's a response
-			var resp Response
-			if err := json.Unmarshal(content, &resp); err != nil {
-				fmt.Fprintf(t.stderr, "Failed to parse response: %v\n", err)
-				return
-			}
-
-			t.mu.Lock()
-			if ch, ok := t.pending[id]; ok {
-				ch <- &resp
-				delete(t.pending, id)
-			}
-			t.mu.Unlock()
-			return
-		}
-	}
-
-	// Check if it's a notification (no id)
-	if _, hasID := msg["id"]; !hasID {
-		if method, hasMethod := msg["method"].(string); hasMethod {
-			var notif Notification
-			if err := json.Unmarshal(content, &notif); err != nil {
-				fmt.Fprintf(t.stderr, "Failed to parse notification: %v\n", err)
-				return
-			}
-
-			// Handle notification
-			t.handlersMu.RLock()
-			handler, ok := t.handlers[method]
-			t.handlersMu.RUnlock()
-
-			if ok {
-				go handler(notif.Params)
-			}
-		}
-	}
-
-	// TODO: Handle requests from server (we don't expect any from clangd)
+	return msg, nil
 }
 
+// Dispatches a notification to its registered handler if one exists.
+// Handlers are called asynchronously to avoid blocking message processing.
+// If no handler is registered for the notification method, it's silently ignored.
+func (t *Transport) handleNotification(notif *Notification) {
+	t.handlersMu.RLock()
+	handler, ok := t.handlers[notif.Method]
+	t.handlersMu.RUnlock()
+
+	if ok {
+		handler(notif.Params)
+	}
+}
+
+// Writes a JSON-RPC message to the output stream with proper framing.
+// The message is preceded by HTTP-style headers including Content-Length.
+// This method assumes the caller holds the transport mutex.
 func (t *Transport) writeMessage(msg interface{}) error {
 	content, err := json.Marshal(msg)
 	if err != nil {
@@ -257,14 +338,11 @@ func (t *Transport) writeMessage(msg interface{}) error {
 
 	header := fmt.Sprintf("Content-Length: %d\r\n\r\n", len(content))
 
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	if _, err := t.stdout.Write([]byte(header)); err != nil {
+	if _, err := t.writer.Write([]byte(header)); err != nil {
 		return err
 	}
 
-	if _, err := t.stdout.Write(content); err != nil {
+	if _, err := t.writer.Write(content); err != nil {
 		return err
 	}
 
