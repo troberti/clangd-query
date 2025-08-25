@@ -145,46 +145,46 @@ func (c *Client) Search(symbol string, limit int) (string, error) {
 }
 
 // Show shows declaration and definition
-func (c *Client) Show(symbolOrLocation string) (string, error) {
+func (c *Client) Show(symbol string) (string, error) {
 	return c.callCommand("show", map[string]interface{}{
-		"symbol": symbolOrLocation,
+		"symbol": symbol,
 	})
 }
 
 // View views complete source code
-func (c *Client) View(symbolOrLocation string) (string, error) {
+func (c *Client) View(symbol string) (string, error) {
 	return c.callCommand("view", map[string]interface{}{
-		"symbol": symbolOrLocation,
+		"symbol": symbol,
 	})
 }
 
 // Usages finds all usages of a symbol
-func (c *Client) Usages(symbolOrLocation string, limit int) (string, error) {
+func (c *Client) Usages(symbol string, limit int) (string, error) {
 	return c.callCommand("usages", map[string]interface{}{
-		"symbol": symbolOrLocation,
+		"symbol": symbol,
 		"limit":  limit,
 	})
 }
 
 // Hierarchy shows type hierarchy
-func (c *Client) Hierarchy(symbolOrLocation string, limit int) (string, error) {
+func (c *Client) Hierarchy(symbol string, limit int) (string, error) {
 	return c.callCommand("hierarchy", map[string]interface{}{
-		"symbol": symbolOrLocation,
+		"symbol": symbol,
 		"limit":  limit,
 	})
 }
 
 // Signature shows function signature
-func (c *Client) Signature(symbolOrLocation string) (string, error) {
+func (c *Client) Signature(symbol string) (string, error) {
 	return c.callCommand("signature", map[string]interface{}{
-		"symbol": symbolOrLocation,
+		"symbol": symbol,
 	})
 }
 
 // Interface shows public interface
-func (c *Client) Interface(symbolOrLocation string) (string, error) {
+func (c *Client) Interface(symbol string) (string, error) {
 	return c.callCommand("interface", map[string]interface{}{
-		"symbol": symbolOrLocation,
+		"symbol": symbol,
 	})
 }
 

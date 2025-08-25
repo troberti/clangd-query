@@ -102,12 +102,11 @@ Usage:
 
 Commands:
   search <query>              Search for symbols across the project
-  show <symbol|location>      Show declaration and definition
-  view <symbol|location>      View complete source code
-  usages <symbol|location>    Find all usages of a symbol
-  hierarchy <symbol|location> Show type hierarchy
-  signature <symbol|location> Show function signature
-  interface <symbol|location> Show public interface
+  show <symbol>               Show source code of symbol
+  usages <symbol>             Find all usages of a symbol
+  hierarchy <symbol>          Show type hierarchy
+  signature <symbol>          Show function signature
+  interface <symbol>          Show public interface
   logs                        Show daemon logs
   status                      Show daemon status
   shutdown                    Shutdown the daemon
