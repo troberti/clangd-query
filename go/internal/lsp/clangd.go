@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -16,7 +17,10 @@ import (
 	"clangd-query/internal/logger"
 )
 
-// ClangdClient manages the clangd subprocess and LSP communication
+// ClangdClient manages a clangd language server subprocess and handles LSP communication.
+// It provides high-level methods for C++ code intelligence operations like finding definitions,
+// references, and symbols. The client maintains the lifecycle of the clangd process and
+// tracks which documents are open to optimize clangd's memory usage.
 type ClangdClient struct {
 	cmd           *exec.Cmd
 	transport     *Transport
@@ -84,7 +88,10 @@ func (c *ClangdClient) PathFromFileURI(uri string) string {
 	return u.Path
 }
 
-// NewClangdClient creates and initializes a new clangd client
+// Creates and initializes a new clangd client for the given project.
+// This function starts the clangd subprocess, establishes LSP communication,
+// and waits for initial indexing to complete. The buildDir should contain
+// a compile_commands.json file for accurate code intelligence.
 func NewClangdClient(projectRoot, buildDir string, log logger.Logger) (*ClangdClient, error) {
 	// Find clangd executable
 	clangdPath, err := exec.LookPath("clangd")
@@ -246,8 +253,10 @@ func (c *ClangdClient) initialize() error {
 	go func() {
 		time.Sleep(5 * time.Second)
 		c.indexingMu.Lock()
+		defer c.indexingMu.Unlock()
 		if c.isIndexing {
 			c.isIndexing = false
+			// Use sync.Once or similar pattern would be better, but for now just be careful
 			select {
 			case <-c.indexingDone:
 				// Already closed
@@ -255,7 +264,6 @@ func (c *ClangdClient) initialize() error {
 				close(c.indexingDone)
 			}
 		}
-		c.indexingMu.Unlock()
 	}()
 
 	return nil
@@ -750,11 +758,32 @@ func (c *ClangdClient) Stop() error {
 	}
 }
 
-// parseClangdLogs reads clangd's stderr and logs it with appropriate levels
+// Reads and processes clangd's stderr output, parsing log levels and forwarding to our logger.
+// This function handles the verbose output from clangd which can include very long lines
+// (e.g., C++ template errors or AST dumps). It uses a 10MB buffer to handle these cases
+// without failing, and intelligently truncates extremely long lines for logging to keep
+// log files manageable while preserving the most important information.
 func (c *ClangdClient) parseClangdLogs(stderr io.Reader) {
 	scanner := bufio.NewScanner(stderr)
+
+	// Set a much larger buffer for the scanner (10MB instead of default 64KB)
+	// This handles long C++ template errors and verbose diagnostic output
+	const maxLineSize = 10 * 1024 * 1024 // 10MB
+	buf := make([]byte, 0, 64*1024)      // Start with 64KB
+	scanner.Buffer(buf, maxLineSize)
+
 	for scanner.Scan() {
 		line := scanner.Text()
+
+		// Truncate extremely long lines for logging (keep first and last part)
+		const maxLogLength = 4096 // Log at most 4KB per line
+		if len(line) > maxLogLength {
+			// Keep first 2KB and last 1KB with ellipsis in middle
+			truncated := line[:2048] + " ... [truncated " +
+				strconv.Itoa(len(line)-3072) + " bytes] ... " +
+				line[len(line)-1024:]
+			line = truncated
+		}
 
 		// Parse clangd log levels
 		// V[timestamp] = verbose/debug
@@ -775,7 +804,8 @@ func (c *ClangdClient) parseClangdLogs(stderr io.Reader) {
 		}
 	}
 
-	// Check for scanner error
+	// Check for scanner error. These are serious errors, as not completely
+	// reading from clangd can block the clangd process.
 	if err := scanner.Err(); err != nil {
 		c.logger.Error("Error reading clangd logs: %v", err)
 	}
