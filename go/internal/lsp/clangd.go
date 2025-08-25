@@ -728,8 +728,12 @@ func (c *ClangdClient) getFirstSourceFile() string {
 // Stop stops the clangd process
 func (c *ClangdClient) Stop() error {
 	// Try graceful shutdown first
-	c.Shutdown()
-	c.Exit()
+	if err := c.Shutdown(); err != nil {
+		c.logger.Debug("Shutdown request failed: %v", err)
+	}
+	if err := c.Exit(); err != nil {
+		c.logger.Debug("Exit notification failed: %v", err)
+	}
 
 	// Give it time to exit
 	done := make(chan error, 1)
@@ -769,6 +773,11 @@ func (c *ClangdClient) parseClangdLogs(stderr io.Reader) {
 				c.logger.Info("[CLANGD] %s", line)
 			}
 		}
+	}
+
+	// Check for scanner error
+	if err := scanner.Err(); err != nil {
+		c.logger.Error("Error reading clangd logs: %v", err)
 	}
 }
 
