@@ -29,6 +29,9 @@ if input == "" {
 }
 ```
 
+EVEYR ERROR THAT IS HANDLED MUST BE LOGGED! There cannot be any errors that are
+discarded without log messages anywhere in the daemon process.
+
 ## Go Code Documentation Guidelines
 
 Write comprehensive documentation for all Go code using proper prose, not terse comments. Go developers value clear, readable documentation that explains not just what the code does, but why it exists and how to use it effectively.
