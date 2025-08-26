@@ -78,17 +78,17 @@ func Run(config *Config) {
 		}
 	}()
 
-	daemon.log("Starting daemon for project: %s", config.ProjectRoot)
+	daemon.logger.Info("Starting daemon for project: %s", config.ProjectRoot)
 
 	// Check for existing daemon
 	if err := daemon.checkExistingDaemon(); err != nil {
-		daemon.log("Error checking existing daemon: %v", err)
+		daemon.logger.Error("Error checking existing daemon: %v", err)
 		os.Exit(1)
 	}
 
 	// Write lock file
 	if err := WriteLockFile(config.ProjectRoot, os.Getpid(), daemon.socketPath); err != nil {
-		daemon.log("Failed to write lock file: %v", err)
+		daemon.logger.Error("Failed to write lock file: %v", err)
 		os.Exit(1)
 	}
 	defer RemoveLockFile(config.ProjectRoot)
@@ -96,15 +96,15 @@ func Run(config *Config) {
 	// Ensure compilation database exists
 	buildDir, err := EnsureCompilationDatabase(config.ProjectRoot, daemon.logger)
 	if err != nil {
-		daemon.log("Failed to ensure compilation database: %v", err)
+		daemon.logger.Error("Failed to find compilation database: %v", err)
 		os.Exit(1)
 	}
 
 	// Start clangd
-	daemon.log("Starting clangd with build directory: %s", buildDir)
+	daemon.logger.Info("Starting clangd with build directory: %s", buildDir)
 	daemon.clangdClient, err = lsp.NewClangdClient(config.ProjectRoot, buildDir, daemon.logger)
 	if err != nil {
-		daemon.log("Failed to start clangd: %v", err)
+		daemon.logger.Error("Failed to start clangd: %v", err)
 		os.Exit(1)
 	}
 	defer daemon.clangdClient.Stop()
@@ -112,7 +112,7 @@ func Run(config *Config) {
 	// Setup file watcher
 	daemon.fileWatcher, err = NewFileWatcher(config.ProjectRoot, daemon.onFilesChanged, daemon.logger)
 	if err != nil {
-		daemon.log("Failed to setup file watcher: %v", err)
+		daemon.logger.Error("Failed to setup file watcher: %v", err)
 		// Continue without file watching
 	} else {
 		defer daemon.fileWatcher.Stop()
@@ -126,16 +126,16 @@ func Run(config *Config) {
 
 	// Start socket server
 	if err := daemon.startSocketServer(); err != nil {
-		daemon.log("Failed to start socket server: %v", err)
+		daemon.logger.Error("Failed to start socket server: %v", err)
 		os.Exit(1)
 	}
 
-	daemon.log("Daemon started successfully")
+	daemon.logger.Info("Daemon started successfully")
 
 	// Wait for shutdown
 	<-daemon.shutdown
 
-	daemon.log("Daemon shutting down")
+	daemon.logger.Info("Daemon shutting down")
 }
 
 func (d *Daemon) setupLogging(verbose bool) error {
@@ -157,10 +157,6 @@ func (d *Daemon) setupLogging(verbose bool) error {
 	return nil
 }
 
-func (d *Daemon) log(format string, args ...interface{}) {
-	d.logger.Info(format, args...)
-}
-
 func (d *Daemon) checkExistingDaemon() error {
 	lockInfo, err := ReadLockFile(d.projectRoot)
 	if err != nil {
@@ -170,7 +166,7 @@ func (d *Daemon) checkExistingDaemon() error {
 	if lockInfo != nil {
 		if IsProcessAlive(lockInfo.PID) {
 			if IsDaemonStale(lockInfo) {
-				d.log("Existing daemon is stale, attempting to stop it")
+				d.logger.Info("Existing daemon is stale, attempting to stop it")
 				// Try to gracefully stop the old daemon
 				syscall.Kill(lockInfo.PID, syscall.SIGTERM)
 				time.Sleep(100 * time.Millisecond)
@@ -178,7 +174,7 @@ func (d *Daemon) checkExistingDaemon() error {
 				return fmt.Errorf("daemon already running with PID %d", lockInfo.PID)
 			}
 		} else {
-			d.log("Found stale lock file, cleaning up")
+			d.logger.Debug("Found stale lock file, cleaning up")
 		}
 
 		// Clean up old socket
@@ -214,7 +210,7 @@ func (d *Daemon) resetIdleTimer() {
 	}
 
 	d.idleTimer = time.AfterFunc(d.idleTimeout, func() {
-		d.log("Idle timeout reached, shutting down")
+		d.logger.Info("Idle timeout reached, shutting down")
 		close(d.shutdown)
 	})
 }
@@ -225,7 +221,7 @@ func (d *Daemon) setupSignalHandlers() {
 
 	go func() {
 		sig := <-sigChan
-		d.log("Received signal: %v", sig)
+		d.logger.Info("Received signal: %v", sig)
 		close(d.shutdown)
 	}()
 }
@@ -258,7 +254,7 @@ func (d *Daemon) acceptConnections() {
 			case <-d.shutdown:
 				return
 			default:
-				d.log("Error accepting connection: %v", err)
+				d.logger.Error("Error accepting connection: %v", err)
 				continue
 			}
 		}
@@ -276,7 +272,7 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 	clientID := d.connections
 	d.mu.Unlock()
 
-	d.log("Client %d connected", clientID)
+	d.logger.Info("Client %d connected", clientID)
 
 	decoder := json.NewDecoder(conn)
 	encoder := json.NewEncoder(conn)
@@ -285,7 +281,7 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		var req Request
 		if err := decoder.Decode(&req); err != nil {
 			if err.Error() != "EOF" {
-				d.log("Client %d: Error decoding request: %v", clientID, err)
+				d.logger.Error("Client %d: Error decoding request: %v", clientID, err)
 			}
 			break
 		}
@@ -294,7 +290,7 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.totalRequests++
 		d.mu.Unlock()
 
-		d.log("Client %d: Request %s", clientID, req.Method)
+		d.logger.Info("Client %d: Request %s", clientID, req.Method)
 
 		// Handle the request
 		result, err := d.handleRequest(req)
@@ -314,12 +310,12 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		}
 
 		if err := encoder.Encode(resp); err != nil {
-			d.log("Client %d: Error encoding response: %v", clientID, err)
+			d.logger.Error("Client %d: Error encoding response: %v", clientID, err)
 			break
 		}
 	}
 
-	d.log("Client %d disconnected", clientID)
+	d.logger.Info("Client %d disconnected", clientID)
 }
 
 func (d *Daemon) handleRequest(req Request) (json.RawMessage, error) {
@@ -410,7 +406,7 @@ func (d *Daemon) handleLogs(req Request) (json.RawMessage, error) {
 }
 
 func (d *Daemon) onFilesChanged(files []string) {
-	d.log("Files changed: %v", files)
+	d.logger.Debug("Files changed: %v", files)
 
 	if d.clangdClient != nil {
 		// Notify clangd about file changes
