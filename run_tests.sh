@@ -1,21 +1,13 @@
-#!/usr/bin/env bash
+#!/bin/bash
 
-set -e
+# Run Go tests for clangd-query
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
-
-# If argument provided, it's a test filter
-TEST_FILTER="$1"
-
-echo "Running tests..."
 cd go
-if [ -n "$TEST_FILTER" ]; then
-    echo "Running: $TEST_FILTER"
-    go test -v ./test -run "$TEST_FILTER"
-    go test -v ./internal/lsp -run "$TEST_FILTER"
+
+if [ -n "$1" ]; then
+    # Run specific test
+    go test -v ./test ./internal/lsp -run "$1"
 else
-    # Run tests in all test directories
-    echo "Running all tests"
+    # Run all tests
     go test -v ./test ./internal/lsp
 fi
