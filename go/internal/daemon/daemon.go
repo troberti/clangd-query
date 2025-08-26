@@ -10,9 +10,9 @@ import (
 	"syscall"
 	"time"
 
+	"clangd-query/internal/clangd"
 	"clangd-query/internal/commands"
 	"clangd-query/internal/logger"
-	"clangd-query/internal/lsp"
 )
 
 // Config contains daemon configuration
@@ -26,7 +26,7 @@ type Daemon struct {
 	projectRoot   string
 	socketPath    string
 	logger        logger.Logger
-	clangdClient  *lsp.ClangdClient
+	clangdClient  *clangd.ClangdClient
 	fileWatcher   *FileWatcher
 	listener      net.Listener
 	idleTimer     *time.Timer
@@ -102,7 +102,7 @@ func Run(config *Config) {
 
 	// Start clangd
 	daemon.logger.Info("Starting clangd with build directory: %s", buildDir)
-	daemon.clangdClient, err = lsp.NewClangdClient(config.ProjectRoot, buildDir, daemon.logger)
+	daemon.clangdClient, err = clangd.NewClangdClient(config.ProjectRoot, buildDir, daemon.logger)
 	if err != nil {
 		daemon.logger.Error("Failed to start clangd: %v", err)
 		os.Exit(1)

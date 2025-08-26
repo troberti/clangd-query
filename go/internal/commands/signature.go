@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"strings"
 
+	"clangd-query/internal/clangd"
 	"clangd-query/internal/logger"
-	"clangd-query/internal/lsp"
 )
 
 // Signature shows function signatures with documentation
-func Signature(client *lsp.ClangdClient, functionName string, log logger.Logger) (string, error) {
+func Signature(client *clangd.ClangdClient, functionName string, log logger.Logger) (string, error) {
 	log.Info("Searching for function/method '%s' to get signatures", functionName)
 
 	// Search for symbols - clangd's fuzzy search handles "View::SetSize" etc
@@ -21,11 +21,11 @@ func Signature(client *lsp.ClangdClient, functionName string, log logger.Logger)
 	log.Debug("Found %d total symbols", len(symbols))
 
 	// Filter to only functions and methods
-	var functionSymbols []lsp.WorkspaceSymbol
+	var functionSymbols []clangd.WorkspaceSymbol
 	for _, sym := range symbols {
-		if sym.Kind == lsp.SymbolKindFunction ||
-			sym.Kind == lsp.SymbolKindMethod ||
-			sym.Kind == lsp.SymbolKindConstructor {
+		if sym.Kind == clangd.SymbolKindFunction ||
+			sym.Kind == clangd.SymbolKindMethod ||
+			sym.Kind == clangd.SymbolKindConstructor {
 			functionSymbols = append(functionSymbols, sym)
 		}
 	}
@@ -89,7 +89,7 @@ func Signature(client *lsp.ClangdClient, functionName string, log logger.Logger)
 }
 
 // formatSignature formats a single function signature with its documentation
-func formatSignature(client *lsp.ClangdClient, symbol lsp.WorkspaceSymbol, doc *lsp.ParsedDocumentation) string {
+func formatSignature(client *clangd.ClangdClient, symbol clangd.WorkspaceSymbol, doc *clangd.ParsedDocumentation) string {
 	var lines []string
 
 	// Location header

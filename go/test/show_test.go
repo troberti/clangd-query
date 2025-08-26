@@ -57,7 +57,7 @@ func TestShowCommand(t *testing.T) {
 		tc.AssertExitCode(result, 0)
 		tc.AssertContains(result.Stdout, "No symbols found matching \"NonExistentMethod\"")
 	})
-	
+
 	t.Run("Show non-existent class", func(t *testing.T) {
 		result := tc.RunCommand("show", "NonExistentClass")
 		tc.AssertExitCode(result, 0)
@@ -86,7 +86,7 @@ func TestShowCommand(t *testing.T) {
 		tc.AssertContains(result.Stdout, "float y")
 		tc.AssertContains(result.Stdout, "float z")
 	})
-	
+
 	// Test for large class with multiple inheritance
 	t.Run("Show large class with multiple inheritance completely", func(t *testing.T) {
 		result := tc.RunCommand("show", "LargeUIManager")

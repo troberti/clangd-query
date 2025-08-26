@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"strings"
 
+	"clangd-query/internal/clangd"
 	"clangd-query/internal/logger"
-	"clangd-query/internal/lsp"
 )
 
 // Hierarchy shows the type hierarchy of a class/struct
-func Hierarchy(client *lsp.ClangdClient, className string, limit int, log logger.Logger) (string, error) {
+func Hierarchy(client *clangd.ClangdClient, className string, limit int, log logger.Logger) (string, error) {
 	log.Info("Searching for class '%s' to get type hierarchy", className)
 
 	// First, find the class symbol
@@ -19,10 +19,10 @@ func Hierarchy(client *lsp.ClangdClient, className string, limit int, log logger
 	}
 
 	// Filter to find the exact class (not methods or other symbols)
-	var classSymbols []lsp.WorkspaceSymbol
+	var classSymbols []clangd.WorkspaceSymbol
 	for _, sym := range symbols {
 		if sym.Name == className &&
-			(sym.Kind == lsp.SymbolKindClass || sym.Kind == lsp.SymbolKindStruct || sym.Kind == lsp.SymbolKindInterface) {
+			(sym.Kind == clangd.SymbolKindClass || sym.Kind == clangd.SymbolKindStruct || sym.Kind == clangd.SymbolKindInterface) {
 			classSymbols = append(classSymbols, sym)
 		}
 	}
@@ -71,12 +71,12 @@ func Hierarchy(client *lsp.ClangdClient, className string, limit int, log logger
 }
 
 // buildCompleteHierarchy builds the complete hierarchy from a root item
-func buildCompleteHierarchy(client *lsp.ClangdClient, item lsp.TypeHierarchyItem, log logger.Logger) (*HierarchyNode, error) {
+func buildCompleteHierarchy(client *clangd.ClangdClient, item clangd.TypeHierarchyItem, log logger.Logger) (*HierarchyNode, error) {
 	// Get immediate supertypes (base classes)
 	supertypes, err := client.GetSupertypes(item)
 	if err != nil {
 		log.Debug("Failed to get supertypes: %v", err)
-		supertypes = []lsp.TypeHierarchyItem{}
+		supertypes = []clangd.TypeHierarchyItem{}
 	}
 
 	// Build supertype nodes (non-recursive - just immediate parents)
@@ -103,7 +103,7 @@ func buildCompleteHierarchy(client *lsp.ClangdClient, item lsp.TypeHierarchyItem
 }
 
 // buildSubtypeTree recursively builds the complete subtype tree
-func buildSubtypeTree(client *lsp.ClangdClient, item lsp.TypeHierarchyItem, log logger.Logger, visited map[string]bool, depth int) (*HierarchyNode, error) {
+func buildSubtypeTree(client *clangd.ClangdClient, item clangd.TypeHierarchyItem, log logger.Logger, visited map[string]bool, depth int) (*HierarchyNode, error) {
 	itemID := fmt.Sprintf("%s:%d:%d", item.URI, item.Range.Start.Line, item.Range.Start.Character)
 
 	// Prevent infinite recursion and limit depth
@@ -122,7 +122,7 @@ func buildSubtypeTree(client *lsp.ClangdClient, item lsp.TypeHierarchyItem, log 
 	subtypes, err := client.GetSubtypes(item)
 	if err != nil {
 		log.Debug("Failed to get subtypes: %v", err)
-		subtypes = []lsp.TypeHierarchyItem{}
+		subtypes = []clangd.TypeHierarchyItem{}
 	}
 
 	// Recursively build subtype nodes
@@ -152,13 +152,13 @@ func buildSubtypeTree(client *lsp.ClangdClient, item lsp.TypeHierarchyItem, log 
 
 // HierarchyNode represents a node in the type hierarchy tree
 type HierarchyNode struct {
-	Item       lsp.TypeHierarchyItem
+	Item       clangd.TypeHierarchyItem
 	Supertypes []HierarchyNode
 	Subtypes   []HierarchyNode
 }
 
 // formatHierarchyTree formats the hierarchy tree into a readable string
-func formatHierarchyTree(tree *HierarchyNode, client *lsp.ClangdClient) string {
+func formatHierarchyTree(tree *HierarchyNode, client *clangd.ClangdClient) string {
 	var lines []string
 
 	// First, show all base classes (supertypes) if any
@@ -185,7 +185,7 @@ func formatHierarchyTree(tree *HierarchyNode, client *lsp.ClangdClient) string {
 }
 
 // formatSupertypes formats the base classes recursively
-func formatSupertypes(nodes []HierarchyNode, lines *[]string, client *lsp.ClangdClient, prefix string) {
+func formatSupertypes(nodes []HierarchyNode, lines *[]string, client *clangd.ClangdClient, prefix string) {
 	for i, node := range nodes {
 		isLast := i == len(nodes)-1
 		connector := "├── "
@@ -215,7 +215,7 @@ func formatSupertypes(nodes []HierarchyNode, lines *[]string, client *lsp.Clangd
 }
 
 // formatSubtypes formats the derived classes recursively
-func formatSubtypes(nodes []HierarchyNode, lines *[]string, client *lsp.ClangdClient, prefix string) {
+func formatSubtypes(nodes []HierarchyNode, lines *[]string, client *clangd.ClangdClient, prefix string) {
 	for i, node := range nodes {
 		isLast := i == len(nodes)-1
 		connector := "├── "

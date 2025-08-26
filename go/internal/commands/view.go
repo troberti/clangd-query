@@ -5,13 +5,13 @@ import (
 	"os"
 	"strings"
 
+	"clangd-query/internal/clangd"
 	"clangd-query/internal/logger"
-	"clangd-query/internal/lsp"
 )
 
 // View extracts the complete source code of a symbol
 // This is a semantic viewer that understands C++ structure and returns complete implementations
-func View(client *lsp.ClangdClient, query string, log logger.Logger) (string, error) {
+func View(client *clangd.ClangdClient, query string, log logger.Logger) (string, error) {
 	log.Info("Viewing source code for: %s", query)
 
 	// Search for the symbol
@@ -41,7 +41,7 @@ func View(client *lsp.ClangdClient, query string, log logger.Logger) (string, er
 	foldingRanges, err := client.GetFoldingRanges(symbol.Location.URI)
 	if err != nil {
 		log.Debug("Failed to get folding ranges: %v", err)
-		foldingRanges = []lsp.FoldingRange{}
+		foldingRanges = []clangd.FoldingRange{}
 	}
 
 	log.Debug("Got %d folding ranges", len(foldingRanges))
@@ -54,20 +54,20 @@ func View(client *lsp.ClangdClient, query string, log logger.Logger) (string, er
 	lines := strings.Split(string(content), "\n")
 
 	var startLine, endLine int
-	var foundRange *lsp.FoldingRange
+	var foundRange *clangd.FoldingRange
 
 	// For classes/structs/enums/functions/methods, the folding range often starts
 	// at or after the declaration line (where the opening brace is).
-	if symbol.Kind == lsp.SymbolKindClass ||
-		symbol.Kind == lsp.SymbolKindStruct ||
-		symbol.Kind == lsp.SymbolKindEnum ||
-		symbol.Kind == lsp.SymbolKindInterface ||
-		symbol.Kind == lsp.SymbolKindFunction ||
-		symbol.Kind == lsp.SymbolKindMethod {
+	if symbol.Kind == clangd.SymbolKindClass ||
+		symbol.Kind == clangd.SymbolKindStruct ||
+		symbol.Kind == clangd.SymbolKindEnum ||
+		symbol.Kind == clangd.SymbolKindInterface ||
+		symbol.Kind == clangd.SymbolKindFunction ||
+		symbol.Kind == clangd.SymbolKindMethod {
 
 		// Look for folding ranges near the symbol
-		var rangeAtSymbol *lsp.FoldingRange
-		var rangeAfterSymbol *lsp.FoldingRange
+		var rangeAtSymbol *clangd.FoldingRange
+		var rangeAfterSymbol *clangd.FoldingRange
 
 		// First, find a range at the symbol line
 		for i := range foldingRanges {
@@ -135,12 +135,12 @@ func View(client *lsp.ClangdClient, query string, log logger.Logger) (string, er
 	if foundRange != nil {
 		// For classes/structs/enums/functions/methods, we want to include the
 		// declaration line(s) too, not just the body
-		if symbol.Kind == lsp.SymbolKindClass ||
-			symbol.Kind == lsp.SymbolKindStruct ||
-			symbol.Kind == lsp.SymbolKindEnum ||
-			symbol.Kind == lsp.SymbolKindInterface ||
-			symbol.Kind == lsp.SymbolKindFunction ||
-			symbol.Kind == lsp.SymbolKindMethod {
+		if symbol.Kind == clangd.SymbolKindClass ||
+			symbol.Kind == clangd.SymbolKindStruct ||
+			symbol.Kind == clangd.SymbolKindEnum ||
+			symbol.Kind == clangd.SymbolKindInterface ||
+			symbol.Kind == clangd.SymbolKindFunction ||
+			symbol.Kind == clangd.SymbolKindMethod {
 			startLine = symbolLine       // Start from the declaration
 			endLine = foundRange.EndLine // End at the closing brace
 			log.Debug("Using adjusted range for %s: %d-%d (symbol at %d, fold at %d-%d)",
@@ -175,10 +175,10 @@ func View(client *lsp.ClangdClient, query string, log logger.Logger) (string, er
 
 	// For classes/structs/enums, check for preceding comment blocks
 	commentStartLine := startLine
-	if symbol.Kind == lsp.SymbolKindClass ||
-		symbol.Kind == lsp.SymbolKindStruct ||
-		symbol.Kind == lsp.SymbolKindEnum ||
-		symbol.Kind == lsp.SymbolKindInterface {
+	if symbol.Kind == clangd.SymbolKindClass ||
+		symbol.Kind == clangd.SymbolKindStruct ||
+		symbol.Kind == clangd.SymbolKindEnum ||
+		symbol.Kind == clangd.SymbolKindInterface {
 		// Look backwards from the symbol line to find comment blocks
 		inCommentBlock := false
 		for i := startLine - 1; i >= 0 && i >= startLine-50; i-- {
@@ -237,7 +237,7 @@ func View(client *lsp.ClangdClient, query string, log logger.Logger) (string, er
 }
 
 // findSymbolAtPosition recursively finds a document symbol at a specific position
-func findSymbolAtPosition(symbols []lsp.DocumentSymbol, targetLine int, name string) *lsp.DocumentSymbol {
+func findSymbolAtPosition(symbols []clangd.DocumentSymbol, targetLine int, name string) *clangd.DocumentSymbol {
 	for i := range symbols {
 		s := &symbols[i]
 		// Check if this symbol's range contains our target position

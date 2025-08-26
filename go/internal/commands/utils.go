@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"clangd-query/internal/lsp"
+	"clangd-query/internal/clangd"
 )
 
 // Generates a helpful hint message when a user searches for multiple words.
@@ -29,23 +29,23 @@ func formatMultiWordQueryHint(query string, commandName string) string {
 
 // Returns a human-readable type prefix (like "class" or "enum") for a given symbol kind.
 // This is used when displaying search results to provide context about the symbol type
-func getSymbolTypePrefix(kind lsp.SymbolKind) string {
+func getSymbolTypePrefix(kind clangd.SymbolKind) string {
 	switch kind {
-	case lsp.SymbolKindClass:
+	case clangd.SymbolKindClass:
 		return "class"
-	case lsp.SymbolKindMethod, lsp.SymbolKindFunction, lsp.SymbolKindConstructor:
+	case clangd.SymbolKindMethod, clangd.SymbolKindFunction, clangd.SymbolKindConstructor:
 		return "" // Methods/functions show just the name
-	case lsp.SymbolKindEnum:
+	case clangd.SymbolKindEnum:
 		return "enum"
-	case lsp.SymbolKindInterface:
+	case clangd.SymbolKindInterface:
 		return "interface"
-	case lsp.SymbolKindStruct:
+	case clangd.SymbolKindStruct:
 		return "struct"
-	case lsp.SymbolKindNamespace:
+	case clangd.SymbolKindNamespace:
 		return "namespace"
-	case lsp.SymbolKindField, lsp.SymbolKindProperty, lsp.SymbolKindVariable:
+	case clangd.SymbolKindField, clangd.SymbolKindProperty, clangd.SymbolKindVariable:
 		return ""
-	case lsp.SymbolKindTypeParameter:
+	case clangd.SymbolKindTypeParameter:
 		return "template"
 	default:
 		return ""
@@ -63,7 +63,7 @@ func extractBaseName(name string) string {
 
 // Formats a workspace symbol with its fully qualified name including any container.
 // Combines the container name and base name with "::" separator for C++ style
-func formatSymbolForDisplay(symbol lsp.WorkspaceSymbol) string {
+func formatSymbolForDisplay(symbol clangd.WorkspaceSymbol) string {
 	baseName := extractBaseName(symbol.Name)
 	if symbol.ContainerName != "" {
 		return symbol.ContainerName + "::" + baseName
@@ -73,7 +73,7 @@ func formatSymbolForDisplay(symbol lsp.WorkspaceSymbol) string {
 
 // Formats a workspace symbol with both its type prefix and fully qualified name.
 // For example, a class Foo in namespace Bar becomes "class Bar::Foo"
-func formatSymbolWithType(symbol lsp.WorkspaceSymbol) string {
+func formatSymbolWithType(symbol clangd.WorkspaceSymbol) string {
 	qualifiedName := formatSymbolForDisplay(symbol)
 	prefix := getSymbolTypePrefix(symbol.Kind)
 	if prefix != "" {
@@ -127,7 +127,7 @@ func wordWrap(text string, maxWidth int) []string {
 // Formats a complete location with file path, line, and column numbers for display.
 // The URI is converted to a relative path from the project root, and line/column
 // numbers are converted from 0-based to 1-based indexing for editor compatibility
-func formatLocation(client *lsp.ClangdClient, location lsp.Location) string {
+func formatLocation(client *clangd.ClangdClient, location clangd.Location) string {
 	// Extract path from URI
 	absolutePath := client.PathFromFileURI(location.URI)
 
@@ -143,7 +143,7 @@ func formatLocation(client *lsp.ClangdClient, location lsp.Location) string {
 // Formats a file location with just the path and line number (no column).
 // This simpler format is used when column information is not relevant or available.
 // The URI is converted to a relative path and the line number to 1-based indexing
-func formatLocationSimple(client *lsp.ClangdClient, uri string, line int) string {
+func formatLocationSimple(client *clangd.ClangdClient, uri string, line int) string {
 	// Convert URI to path
 	absolutePath := client.PathFromFileURI(uri)
 	// Make path relative
@@ -156,65 +156,65 @@ func formatLocationSimple(client *lsp.ClangdClient, uri string, line int) string
 // and formats it as a relative path with line number (e.g., "src/foo.cpp:42").
 // The function is primarily used by the hierarchy command to consistently format
 // locations of base classes, derived classes, and the main class being analyzed.
-func formatHierarchyItemLocation(client *lsp.ClangdClient, item lsp.TypeHierarchyItem) string {
+func formatHierarchyItemLocation(client *clangd.ClangdClient, item clangd.TypeHierarchyItem) string {
 	return formatLocationSimple(client, item.URI, item.Range.Start.Line)
 }
 
 // Converts a SymbolKind enum value to its human-readable string representation.
 // Used throughout the codebase to display symbol types in command output
-func SymbolKindToString(kind lsp.SymbolKind) string {
+func SymbolKindToString(kind clangd.SymbolKind) string {
 	switch kind {
-	case lsp.SymbolKindFile:
+	case clangd.SymbolKindFile:
 		return "file"
-	case lsp.SymbolKindModule:
+	case clangd.SymbolKindModule:
 		return "module"
-	case lsp.SymbolKindNamespace:
+	case clangd.SymbolKindNamespace:
 		return "namespace"
-	case lsp.SymbolKindPackage:
+	case clangd.SymbolKindPackage:
 		return "package"
-	case lsp.SymbolKindClass:
+	case clangd.SymbolKindClass:
 		return "class"
-	case lsp.SymbolKindMethod:
+	case clangd.SymbolKindMethod:
 		return "method"
-	case lsp.SymbolKindProperty:
+	case clangd.SymbolKindProperty:
 		return "property"
-	case lsp.SymbolKindField:
+	case clangd.SymbolKindField:
 		return "field"
-	case lsp.SymbolKindConstructor:
+	case clangd.SymbolKindConstructor:
 		return "constructor"
-	case lsp.SymbolKindEnum:
+	case clangd.SymbolKindEnum:
 		return "enum"
-	case lsp.SymbolKindInterface:
+	case clangd.SymbolKindInterface:
 		return "interface"
-	case lsp.SymbolKindFunction:
+	case clangd.SymbolKindFunction:
 		return "function"
-	case lsp.SymbolKindVariable:
+	case clangd.SymbolKindVariable:
 		return "variable"
-	case lsp.SymbolKindConstant:
+	case clangd.SymbolKindConstant:
 		return "constant"
-	case lsp.SymbolKindString:
+	case clangd.SymbolKindString:
 		return "string"
-	case lsp.SymbolKindNumber:
+	case clangd.SymbolKindNumber:
 		return "number"
-	case lsp.SymbolKindBoolean:
+	case clangd.SymbolKindBoolean:
 		return "boolean"
-	case lsp.SymbolKindArray:
+	case clangd.SymbolKindArray:
 		return "array"
-	case lsp.SymbolKindObject:
+	case clangd.SymbolKindObject:
 		return "object"
-	case lsp.SymbolKindKey:
+	case clangd.SymbolKindKey:
 		return "key"
-	case lsp.SymbolKindNull:
+	case clangd.SymbolKindNull:
 		return "null"
-	case lsp.SymbolKindEnumMember:
+	case clangd.SymbolKindEnumMember:
 		return "enum member"
-	case lsp.SymbolKindStruct:
+	case clangd.SymbolKindStruct:
 		return "struct"
-	case lsp.SymbolKindEvent:
+	case clangd.SymbolKindEvent:
 		return "event"
-	case lsp.SymbolKindOperator:
+	case clangd.SymbolKindOperator:
 		return "operator"
-	case lsp.SymbolKindTypeParameter:
+	case clangd.SymbolKindTypeParameter:
 		return "type parameter"
 	default:
 		return "symbol"

@@ -6,13 +6,13 @@ import (
 	"strconv"
 	"strings"
 
+	"clangd-query/internal/clangd"
 	"clangd-query/internal/logger"
-	"clangd-query/internal/lsp"
 )
 
 // Usages finds all references to a symbol and returns them as formatted text
 // Two input modes: symbol names OR file:line:column locations
-func Usages(client *lsp.ClangdClient, input string, limit int, log logger.Logger) (string, error) {
+func Usages(client *clangd.ClangdClient, input string, limit int, log logger.Logger) (string, error) {
 	// Check if input is a location string (file:line:column)
 	locationMatch := regexp.MustCompile(`^(.+):(\d+):(\d+)$`)
 	matches := locationMatch.FindStringSubmatch(input)
@@ -40,14 +40,14 @@ func Usages(client *lsp.ClangdClient, input string, limit int, log logger.Logger
 }
 
 // findReferencesAtLocation finds references at a specific location
-func findReferencesAtLocation(client *lsp.ClangdClient, file string, line, column int, originalLocation string, log logger.Logger) (string, error) {
+func findReferencesAtLocation(client *clangd.ClangdClient, file string, line, column int, originalLocation string, log logger.Logger) (string, error) {
 	log.Info("Finding references at location: %s", originalLocation)
 
 	// Convert to absolute path if needed
 	absolutePath := client.ToAbsolutePath(file)
 
 	uri := client.FileURIFromPath(absolutePath)
-	position := lsp.Position{
+	position := clangd.Position{
 		Line:      line - 1, // Convert to 0-based
 		Character: column - 1,
 	}
@@ -81,7 +81,7 @@ func findReferencesAtLocation(client *lsp.ClangdClient, file string, line, colum
 }
 
 // findReferencesToSymbol finds references to a symbol by searching for it first
-func findReferencesToSymbol(client *lsp.ClangdClient, symbolName string, log logger.Logger) (string, error) {
+func findReferencesToSymbol(client *clangd.ClangdClient, symbolName string, log logger.Logger) (string, error) {
 	log.Info("Finding references to symbol: %s", symbolName)
 
 	// First, search for the symbol

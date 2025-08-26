@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"strings"
 
+	"clangd-query/internal/clangd"
 	"clangd-query/internal/logger"
-	"clangd-query/internal/lsp"
 )
 
 // Interface extracts the public interface of a class/struct
-func Interface(client *lsp.ClangdClient, input string, log logger.Logger) (string, error) {
+func Interface(client *clangd.ClangdClient, input string, log logger.Logger) (string, error) {
 	// Search for the symbol
 	symbols, err := client.WorkspaceSymbol(input)
 	if err != nil {
@@ -27,7 +27,7 @@ func Interface(client *lsp.ClangdClient, input string, log logger.Logger) (strin
 	symbol := symbols[0]
 
 	// Check if it's a class or struct
-	if symbol.Kind != lsp.SymbolKindClass && symbol.Kind != lsp.SymbolKindStruct {
+	if symbol.Kind != clangd.SymbolKindClass && symbol.Kind != clangd.SymbolKindStruct {
 		log.Info("Symbol '%s' is not a class or struct (it's a %s)", input, SymbolKindToString(symbol.Kind))
 		return fmt.Sprintf("'%s' is not a class or struct (it's a %s)\n\nThe interface command only works with classes and structs.",
 			formatSymbolForDisplay(symbol), SymbolKindToString(symbol.Kind)), nil
@@ -44,15 +44,15 @@ func Interface(client *lsp.ClangdClient, input string, log logger.Logger) (strin
 	}
 
 	// Find the class/struct at the position
-	var targetSymbol *lsp.DocumentSymbol
-	var findSymbol func([]lsp.DocumentSymbol)
+	var targetSymbol *clangd.DocumentSymbol
+	var findSymbol func([]clangd.DocumentSymbol)
 
-	findSymbol = func(syms []lsp.DocumentSymbol) {
+	findSymbol = func(syms []clangd.DocumentSymbol) {
 		for i := range syms {
 			s := &syms[i]
 			if s.Range.Start.Line <= position.Line && position.Line <= s.Range.End.Line {
 				// Check if it's a class or struct
-				if s.Kind == lsp.SymbolKindClass || s.Kind == lsp.SymbolKindStruct {
+				if s.Kind == clangd.SymbolKindClass || s.Kind == clangd.SymbolKindStruct {
 					targetSymbol = s
 					return // Found the most specific match
 				}
@@ -75,9 +75,9 @@ func Interface(client *lsp.ClangdClient, input string, log logger.Logger) (strin
 	var output strings.Builder
 
 	// Format class name with location - use selection range start for more precise location
-	location := formatLocation(client, lsp.Location{
+	location := formatLocation(client, clangd.Location{
 		URI: uri,
-		Range: lsp.Range{
+		Range: clangd.Range{
 			Start: targetSymbol.SelectionRange.Start,
 			End:   targetSymbol.SelectionRange.Start,
 		},
@@ -106,7 +106,7 @@ func Interface(client *lsp.ClangdClient, input string, log logger.Logger) (strin
 
 	// Use the correct keyword (class or struct)
 	symbolTypeKeyword := "class"
-	if targetSymbol.Kind == lsp.SymbolKindStruct {
+	if targetSymbol.Kind == clangd.SymbolKindStruct {
 		symbolTypeKeyword = "struct"
 	}
 	output.WriteString(fmt.Sprintf("%s %s - %s\n\n", symbolTypeKeyword, fullName, location))
@@ -172,7 +172,7 @@ func Interface(client *lsp.ClangdClient, input string, log logger.Logger) (strin
 }
 
 // formatSymbolSignature formats a symbol as a signature string
-func formatSymbolSignature(symbol *lsp.DocumentSymbol) string {
+func formatSymbolSignature(symbol *clangd.DocumentSymbol) string {
 	signature := symbol.Name
 
 	// Add detail if available
@@ -190,11 +190,11 @@ func formatSymbolSignature(symbol *lsp.DocumentSymbol) string {
 	kind := symbol.Kind.String()
 	if !strings.Contains(signature, kind) {
 		switch symbol.Kind {
-		case lsp.SymbolKindMethod:
+		case clangd.SymbolKindMethod:
 			// Methods already have signatures
-		case lsp.SymbolKindField:
+		case clangd.SymbolKindField:
 			// Fields are fine as is
-		case lsp.SymbolKindConstructor:
+		case clangd.SymbolKindConstructor:
 			signature = "constructor " + signature
 		default:
 			signature = kind + " " + signature

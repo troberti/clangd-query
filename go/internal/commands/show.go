@@ -7,13 +7,13 @@ import (
 	"sort"
 	"strings"
 
+	"clangd-query/internal/clangd"
 	"clangd-query/internal/logger"
-	"clangd-query/internal/lsp"
 )
 
 // Show displays both declaration and definition of a symbol with contextual code
 // This command intelligently handles C++ declaration/definition split.
-func Show(client *lsp.ClangdClient, query string, log logger.Logger) (string, error) {
+func Show(client *clangd.ClangdClient, query string, log logger.Logger) (string, error) {
 	log.Info("Getting context for: %s", query)
 
 	// Search for the symbol with a higher limit to ensure we find it
@@ -40,16 +40,16 @@ func Show(client *lsp.ClangdClient, query string, log logger.Logger) (string, er
 	// For methods and functions, try to find both declaration and definition
 	type locationInfo struct {
 		locType      string
-		location     lsp.Location
+		location     clangd.Location
 		path         string
 		isDefinition bool
 	}
 
 	var locations []locationInfo
 
-	if symbol.Kind == lsp.SymbolKindFunction ||
-		symbol.Kind == lsp.SymbolKindMethod ||
-		symbol.Kind == lsp.SymbolKindConstructor {
+	if symbol.Kind == clangd.SymbolKindFunction ||
+		symbol.Kind == clangd.SymbolKindMethod ||
+		symbol.Kind == clangd.SymbolKindConstructor {
 
 		// Determine if the symbol location is a definition or declaration
 		symbolHasBody, _ := hasBody(symbolPath, symbol.Location.Range.Start.Line)
@@ -157,7 +157,7 @@ func Show(client *lsp.ClangdClient, query string, log logger.Logger) (string, er
 		foldingRanges, err := client.GetFoldingRanges(loc.location.URI)
 		if err != nil {
 			log.Debug("Failed to get folding ranges: %v", err)
-			foldingRanges = []lsp.FoldingRange{}
+			foldingRanges = []clangd.FoldingRange{}
 		}
 
 		contextStart := startLine
@@ -180,16 +180,16 @@ func Show(client *lsp.ClangdClient, query string, log logger.Logger) (string, er
 		}
 
 		// Handle functions/methods based on whether they are definitions
-		if symbol.Kind == lsp.SymbolKindFunction ||
-			symbol.Kind == lsp.SymbolKindMethod ||
-			symbol.Kind == lsp.SymbolKindConstructor {
+		if symbol.Kind == clangd.SymbolKindFunction ||
+			symbol.Kind == clangd.SymbolKindMethod ||
+			symbol.Kind == clangd.SymbolKindConstructor {
 
 			if loc.isDefinition {
 				// This is a definition, show the complete implementation
 				contextStart = commentStart
 
 				// Find the folding range that represents this function body
-				var functionRange *lsp.FoldingRange
+				var functionRange *clangd.FoldingRange
 				bestRangeSize := 0
 
 				for _, foldRange := range foldingRanges {
@@ -217,9 +217,9 @@ func Show(client *lsp.ClangdClient, query string, log logger.Logger) (string, er
 				contextStart = commentStart
 				contextEnd = loc.location.Range.End.Line
 			}
-		} else if symbol.Kind == lsp.SymbolKindClass ||
-			symbol.Kind == lsp.SymbolKindStruct ||
-			symbol.Kind == lsp.SymbolKindEnum {
+		} else if symbol.Kind == clangd.SymbolKindClass ||
+			symbol.Kind == clangd.SymbolKindStruct ||
+			symbol.Kind == clangd.SymbolKindEnum {
 			// Use comments we already found
 			contextStart = commentStart
 
@@ -228,10 +228,10 @@ func Show(client *lsp.ClangdClient, query string, log logger.Logger) (string, er
 			if err != nil {
 				return "", fmt.Errorf("failed to get document symbols: %v", err)
 			}
-			
+
 			// Find the symbol that matches our class
-			var findSymbol func([]lsp.DocumentSymbol) *lsp.DocumentSymbol
-			findSymbol = func(syms []lsp.DocumentSymbol) *lsp.DocumentSymbol {
+			var findSymbol func([]clangd.DocumentSymbol) *clangd.DocumentSymbol
+			findSymbol = func(syms []clangd.DocumentSymbol) *clangd.DocumentSymbol {
 				for i := range syms {
 					s := &syms[i]
 					// Check if this symbol matches our position
@@ -250,12 +250,12 @@ func Show(client *lsp.ClangdClient, query string, log logger.Logger) (string, er
 				}
 				return nil
 			}
-			
+
 			classSymbol := findSymbol(docSymbols)
 			if classSymbol == nil {
 				return "", fmt.Errorf("could not find %s in document symbols", symbolKindName)
 			}
-			
+
 			// Use the full range from the document symbol
 			contextEnd = classSymbol.Range.End.Line
 		} else {
@@ -280,9 +280,9 @@ func Show(client *lsp.ClangdClient, query string, log logger.Logger) (string, er
 		formattedLoc := formatLocation(client, loc.location)
 
 		// Always show the type for functions/methods/constructors
-		if symbol.Kind == lsp.SymbolKindFunction ||
-			symbol.Kind == lsp.SymbolKindMethod ||
-			symbol.Kind == lsp.SymbolKindConstructor {
+		if symbol.Kind == clangd.SymbolKindFunction ||
+			symbol.Kind == clangd.SymbolKindMethod ||
+			symbol.Kind == clangd.SymbolKindConstructor {
 			if loc.locType == "declaration" {
 				result += fmt.Sprintf("From %s (declaration)\n", formattedLoc)
 			} else if loc.locType == "definition" {

@@ -1,4 +1,4 @@
-package lsp
+package clangd
 
 import "encoding/json"
 

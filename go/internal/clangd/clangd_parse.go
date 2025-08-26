@@ -1,4 +1,4 @@
-package lsp
+package clangd
 
 import "strings"
 
@@ -9,11 +9,11 @@ func readCompleteSignature(lines []string, startIdx int, firstLine string) (stri
 	if !strings.Contains(firstLine, "(") {
 		return firstLine, startIdx
 	}
-	
+
 	if hasBalancedParentheses(firstLine) {
 		return firstLine, startIdx
 	}
-	
+
 	// Multi-line signature - continue reading until balanced
 	fullSignature := firstLine
 	lastIdx := startIdx
@@ -51,7 +51,7 @@ func processSignatureLine(lines []string, startIdx int, signatureLine string, do
 		}
 		return startIdx
 	}
-	
+
 	// Not a template - read the complete signature (handling multi-line)
 	completeSignature, lastIdx := readCompleteSignature(lines, startIdx, signatureLine)
 	doc.Signature = formatSignature(completeSignature)

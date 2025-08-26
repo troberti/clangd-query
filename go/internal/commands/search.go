@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"strings"
 
+	"clangd-query/internal/clangd"
 	"clangd-query/internal/logger"
-	"clangd-query/internal/lsp"
 )
 
 // Performs a workspace-wide symbol search and returns formatted text output.
-func Search(client *lsp.ClangdClient, query string, limit int, log logger.Logger) (string, error) {
+func Search(client *clangd.ClangdClient, query string, limit int, log logger.Logger) (string, error) {
 	log.Info("Searching for symbols matching: %s (limit: %d)", query, limit)
 
 	// Perform workspace symbol search
