@@ -104,13 +104,7 @@ func NewClangdClient(projectRoot, buildDir string, log logger.Logger) (*ClangdCl
 		"--background-index",
 		fmt.Sprintf("--compile-commands-dir=%s", buildDir),
 		"--log=verbose",
-		"--header-insertion=never",
-		"--pch-storage=memory",
-		"--ranking-model=decision_forest",
-		"--all-scopes-completion",
-		"--completion-style=detailed",
-		"--function-arg-placeholders",
-		"--header-insertion-decorators")
+		"--header-insertion=never")
 
 	// Create a pipe to capture and parse clangd's stderr
 	stderrPipe, err := cmd.StderrPipe()
