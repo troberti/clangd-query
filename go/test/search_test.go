@@ -19,19 +19,19 @@ func TestSearchCommand(t *testing.T) {
 			// are first.
 			" matching \"GameObject\":\n"+
 				"\n"+
-				"- `class game_engine::GameObject` at include/core/game_object.h:22:7\n"+
-				"- `game_engine::GameObject::GameObject` at src/core/game_object.cpp:12:13\n"+
-				"- `game_engine::Engine::game_objects_` at include/core/engine.h:120:44\n"+
-				"- `game_engine::Engine::CreateGameObject` at src/core/engine.cpp:136:37\n"+
-				"- `game_engine::Engine::DestroyGameObject` at src/core/engine.cpp:142:14\n"+
-				"- `game_engine::Engine::GetGameObjects` at include/core/engine.h:94:51\n")
+				"- `game_engine::GameObject` at include/core/game_object.h:26:7 [class]\n"+
+				"- `game_engine::GameObject::GameObject` at src/core/game_object.cpp:12:13 [constructor]\n"+
+				"- `game_engine::Engine::game_objects_` at include/core/engine.h:120:44 [field]\n"+
+				"- `game_engine::Engine::CreateGameObject` at src/core/engine.cpp:136:37 [method]\n"+
+				"- `game_engine::Engine::DestroyGameObject` at src/core/engine.cpp:142:14 [method]\n"+
+				"- `game_engine::Engine::GetGameObjects` at include/core/engine.h:94:51 [method]\n")
 		tc.AssertContains(result.Stdout, "game_engine::GameObject::~GameObject")
 	})
 
 	t.Run("Search for Character class and related symbols", func(t *testing.T) {
 		result := tc.RunCommand("search", "Character")
 		tc.AssertExitCode(result, 0)
-		tc.AssertContains(result.Stdout, "class game_engine::Character")
+		tc.AssertContains(result.Stdout, "game_engine::Character` at")
 		// Should find Character class in character.h
 		if !strings.Contains(result.Stdout, "Character") || !strings.Contains(result.Stdout, "character.h") {
 			t.Errorf("Expected to find Character in character.h")

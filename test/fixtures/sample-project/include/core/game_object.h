@@ -13,13 +13,17 @@ namespace game_engine {
 
 class Component;
 
+struct AddComponentOptions {
+  bool override = false;
+};
+
 /**
  * @brief Base class for all game objects in the engine
- * 
+ *
  * GameObject represents any entity in the game world. It can contain
  * multiple components that define its behavior and properties.
  */
-class GameObject : public Updatable, 
+class GameObject : public Updatable,
                    public Renderable,
                    public std::enable_shared_from_this<GameObject> {
  public:
@@ -30,7 +34,7 @@ class GameObject : public Updatable,
   void Update(float delta_time) override;
   bool IsActive() const override { return active_; }
 
-  // Renderable interface  
+  // Renderable interface
   void Render(float interpolation) override;
   int GetRenderPriority() const override { return render_priority_; }
   bool IsVisible() const override { return visible_; }
@@ -65,6 +69,14 @@ class GameObject : public Updatable,
    */
   void AddComponent(std::shared_ptr<Component> component);
 
+
+  // Adds a component to the game object, with the given options.
+  //
+  // Note for tests: This function uses a multiple argument line on purposes for
+  // testing.
+  void AddComponenWithOptions(std::shared_ptr<Component> component,
+                              const AddComponentOptions& options = {});
+
   /**
    * @brief Gets a component by type
    * @tparam T The component type to retrieve
@@ -92,28 +104,28 @@ class GameObject : public Updatable,
  protected:
   /**
    * @brief Called when the object is first created
-   * 
+   *
    * Override this to perform initialization logic.
    */
   virtual void OnCreate() {}
 
   /**
    * @brief Called when the object is about to be destroyed
-   * 
+   *
    * Override this to perform cleanup logic.
    */
   virtual void OnDestroy() {}
 
   /**
    * @brief Called during the update cycle
-   * 
+   *
    * Override this to add custom update logic.
    */
   virtual void OnUpdate(float delta_time) { (void)delta_time; }
 
  private:
   static uint64_t next_id_;
-  
+
   uint64_t id_;
   std::string name_;
   bool active_ = true;

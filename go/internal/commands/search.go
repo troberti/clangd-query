@@ -31,33 +31,21 @@ func Search(client *lsp.ClangdClient, query string, limit int, log logger.Logger
 		return fmt.Sprintf(`No symbols found matching "%s"`, query), nil
 	}
 
-	// Apply limit to match TypeScript behavior
+	// Apply limit
 	if limit > 0 && len(symbols) > limit {
 		symbols = symbols[:limit]
 	}
 
-	// Build output - report actual number of symbols we'll show
+	// Build output
 	output := fmt.Sprintf(`Found %d symbols matching "%s":`+"\n\n", len(symbols), query)
-
 	for _, symbol := range symbols {
-
-		// Build the fully qualified name with type prefix
-		fullName := formatSymbolWithType(symbol)
-
-		// Get absolute path from URI
-		absolutePath := client.PathFromFileURI(symbol.Location.URI)
-		// Convert to relative path for display
-		relativePath := client.ToRelativePath(absolutePath)
-
-		// Format location
-		line := symbol.Location.Range.Start.Line + 1 // Convert to 1-based
-		column := symbol.Location.Range.Start.Character + 1
-		formattedLocation := fmt.Sprintf("%s:%d:%d", relativePath, line, column)
-
-		// Format with bullet point, backticks, and "at" prefix
-		output += fmt.Sprintf("- `%s` at %s\n", fullName, formattedLocation)
+		// Format with bullet point, backticks, "at" prefix, and kind at the end
+		output += fmt.Sprintf(
+			"- `%s` at %s [%s]\n",
+			formatSymbolForDisplay(symbol),
+			formatLocation(client, symbol.Location),
+			SymbolKindToString(symbol.Kind))
 	}
-
 	// Remove trailing newline
 	return strings.TrimRight(output, "\n"), nil
 }
