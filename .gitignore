@@ -1,6 +1,4 @@
 .DS_Store
-node_modules/
-dist/
 .clangd-query.lock
 test/fixtures/sample-project/build
 test/fixtures/sample-project/.cache

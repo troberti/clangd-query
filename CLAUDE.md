@@ -141,7 +141,6 @@ func GetValue() int
 - ALWAYS run commands from the root directory.
 - USE THE PROVIDED SCRIPTS:
   - `./test.sh <command>` - Run commands on the test fixture
-  - `./compare.sh <command>` - Compare Go vs TypeScript implementations
   - `./test.sh logs --verbose` - View verbose daemon logs for debugging
   - `./build.sh` - Build the Go implementation
 
@@ -180,12 +179,9 @@ func GetValue() int
 
 ## Development
 
-Use `./test.sh` to run the clangd-query tool in Go against the test source
-database. Use `./test-old.sh` to use the old Typescript version.
+Use `./test.sh` to run the clangd-query tool against the test source database.
 
-Use `./compare.sh` to run both versions and compare their output.
-
-ONLY use these tools when developing.
+ONLY use this tool when developing.
 
 ## Testing
 

@@ -18,26 +18,14 @@ Fast C++ code intelligence CLI tool that provides instant access to semantic cod
 
 ## Installation
 
-### From npm (coming soon)
-```bash
-npm install -g clangd-query
-```
-
 ### From source
 1. Clone this repository
-2. Make sure you have Node.js v18+ installed
-3. Install dependencies:
+2. Make sure you have Go 1.21+ installed
+3. Build the binary:
    ```bash
-   npm install
+   ./build.sh
    ```
-4. Build the TypeScript code:
-   ```bash
-   npm run build
-   ```
-5. Link the command globally:
-   ```bash
-   npm link
-   ```
+4. The binary will be available at `bin/clangd-query`
 
 ## Prerequisites
 
@@ -259,11 +247,11 @@ The tool will build a `compile_commands.json` from the `CMakeLists.txt`, which m
 - **Compilation Database**: Cached in `.cache/clangd-query/build/compile_commands.json`
 - **Index Location**: `.cache/clangd-query/build/.cache/clangd/index/`
 - **Socket Location**: System temp directory
-- **Log Files**: System temp directory
+- **Log Files**: `.cache/clangd-query/daemon.log`
 
 ## Requirements
 
-- Node.js 18 or higher
+- Go 1.21 or higher
 - clangd 12 or higher (15+ recommended for full feature support)
 - CMake-based C++ project (for automatic compile_commands.json generation)
 
