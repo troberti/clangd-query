@@ -18,6 +18,8 @@ func TestInterfaceCommand(t *testing.T) {
 		tc.AssertContains(result.Stdout, "void Update(float delta_time) override")
 		tc.AssertContains(result.Stdout, "uint64_t GetId() const")
 		tc.AssertContains(result.Stdout, "void AddComponent(std::shared_ptr<Component> component)")
+		// Should correctly handle multi-line function signatures (test for the fix)
+		tc.AssertContains(result.Stdout, "void AddComponenWithOptions(std::shared_ptr<Component> component, const AddComponentOptions& options = {})")
 		// Should show template method
 		tc.AssertContains(result.Stdout, "template <typename T>")
 		tc.AssertContains(result.Stdout, "std::optional<std::shared_ptr<T>> GetComponent() const")

@@ -2,6 +2,63 @@ package lsp
 
 import "strings"
 
+// Reads a complete function signature from lines starting at startIdx.
+// Handles multi-line signatures by continuing to read lines until parentheses are balanced.
+// Returns the complete signature and the index of the last line consumed.
+func readCompleteSignature(lines []string, startIdx int, firstLine string) (string, int) {
+	if !strings.Contains(firstLine, "(") {
+		return firstLine, startIdx
+	}
+	
+	if hasBalancedParentheses(firstLine) {
+		return firstLine, startIdx
+	}
+	
+	// Multi-line signature - continue reading until balanced
+	fullSignature := firstLine
+	lastIdx := startIdx
+	for i := startIdx + 1; i < len(lines); i++ {
+		line := strings.TrimSpace(lines[i])
+		if line != "" && !strings.HasPrefix(line, "// ") {
+			fullSignature += " " + line
+			lastIdx = i
+			if hasBalancedParentheses(fullSignature) {
+				break
+			}
+		}
+	}
+	return fullSignature, lastIdx
+}
+
+// Processes a signature line, handling both template declarations and regular signatures.
+// For templates, reads the next line to get the actual method signature.
+// For regular signatures, handles multi-line cases by reading continuation lines.
+func processSignatureLine(lines []string, startIdx int, signatureLine string, doc *ParsedDocumentation) int {
+	// Check if this is a template declaration
+	if strings.HasPrefix(signatureLine, "template") && strings.HasSuffix(signatureLine, ">") {
+		// This is a template, look for the actual method signature on the next line
+		for i := startIdx + 1; i < len(lines); i++ {
+			methodLine := strings.TrimSpace(lines[i])
+			if methodLine != "" && !strings.HasPrefix(methodLine, "// ") {
+				// Read complete method signature (might be multi-line)
+				completeMethodSig, _ := readCompleteSignature(lines, i, methodLine)
+				// Combine template and method signature
+				doc.Signature = signatureLine + "\n" + formatSignature(completeMethodSig)
+				// Extract modifiers and other info from the method signature part
+				extractSignatureDetails(completeMethodSig, doc)
+				return i
+			}
+		}
+		return startIdx
+	}
+	
+	// Not a template - read the complete signature (handling multi-line)
+	completeSignature, lastIdx := readCompleteSignature(lines, startIdx, signatureLine)
+	doc.Signature = formatSignature(completeSignature)
+	extractSignatureDetails(completeSignature, doc)
+	return lastIdx
+}
+
 // Parse hover content from clangd into structured documentation.
 //
 // This function extracts various pieces of information from the markdown-formatted
@@ -50,24 +107,7 @@ func parseDocumentation(content string) *ParsedDocumentation {
 				for j := i + 1; j < len(lines); j++ {
 					nextLine := strings.TrimSpace(lines[j])
 					if nextLine != "" && !strings.HasPrefix(nextLine, "// ") {
-						// Check if this is a template declaration
-						if strings.HasPrefix(nextLine, "template") && strings.HasSuffix(nextLine, ">") {
-							// This is a template, look for the actual method signature on the next line
-							for k := j + 1; k < len(lines); k++ {
-								methodLine := strings.TrimSpace(lines[k])
-								if methodLine != "" && !strings.HasPrefix(methodLine, "// ") {
-									// Combine template and method signature
-									doc.Signature = nextLine + "\n" + formatSignature(methodLine)
-									// Extract modifiers and other info from the method signature part
-									extractSignatureDetails(methodLine, doc)
-									break
-								}
-							}
-						} else {
-							doc.Signature = formatSignature(nextLine)
-							// Extract modifiers and other info from the signature
-							extractSignatureDetails(nextLine, doc)
-						}
+						processSignatureLine(lines, j, nextLine, doc)
 						break
 					}
 				}
@@ -98,24 +138,7 @@ func parseDocumentation(content string) *ParsedDocumentation {
 					signatureLine = strings.TrimPrefix(line, "protected: ")
 				}
 
-				// Check if this is a template declaration
-				if strings.HasPrefix(signatureLine, "template") && strings.HasSuffix(signatureLine, ">") {
-					// This is a template, look for the actual method signature on the next line
-					for j := i + 1; j < len(lines); j++ {
-						methodLine := strings.TrimSpace(lines[j])
-						if methodLine != "" && !strings.HasPrefix(methodLine, "// ") {
-							// Combine template and method signature
-							doc.Signature = signatureLine + "\n" + formatSignature(methodLine)
-							// Extract modifiers and other info from the method signature part
-							extractSignatureDetails(methodLine, doc)
-							break
-						}
-					}
-				} else {
-					doc.Signature = formatSignature(signatureLine)
-					// Extract modifiers and other info from the signature
-					extractSignatureDetails(signatureLine, doc)
-				}
+				processSignatureLine(lines, i, signatureLine, doc)
 			}
 		}
 	}
@@ -198,6 +221,25 @@ func parseDocumentation(content string) *ParsedDocumentation {
 }
 
 // extractModifiers extracts C++ modifiers from a signature line
+// hasBalancedParentheses checks if a string has balanced parentheses.
+// This is used to determine if a function signature is complete, handling
+// cases like std::function<void()> where there are nested parentheses.
+func hasBalancedParentheses(s string) bool {
+	count := 0
+	for _, ch := range s {
+		switch ch {
+		case '(':
+			count++
+		case ')':
+			count--
+			if count < 0 {
+				return false // More closing than opening
+			}
+		}
+	}
+	return count == 0
+}
+
 func extractModifiers(line string) []string {
 	var modifiers []string
 

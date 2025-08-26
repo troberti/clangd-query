@@ -536,6 +536,67 @@ private: uint64_t id_
 	}
 }
 
+// TestMultiLineFunctionSignatures tests parsing of multi-line function signatures
+func TestMultiLineFunctionSignatures(t *testing.T) {
+	tests := []struct {
+		name          string
+		input         string
+		wantSignature string
+	}{
+		{
+			name: "multi-line function with multiple parameters",
+			input: `### instance-method ` + "`AddComponentWithOptions`" + `
+→ ` + "`void`" + `
+Parameters:
+- ` + "`std::shared_ptr<Component> component`" + `
+- ` + "`const AddComponentOptions& options = {}`" + `
+
+---
+` + "```cpp" + `
+public:
+  void AddComponentWithOptions(std::shared_ptr<Component> component,
+                               const AddComponentOptions& options = {})
+` + "```",
+			wantSignature: "void AddComponentWithOptions(std::shared_ptr<Component> component, const AddComponentOptions& options = {})",
+		},
+		{
+			name: "function with std::function parameter",
+			input: `### instance-method ` + "`RegisterCallback`" + `
+→ ` + "`void`" + `
+
+---
+` + "```cpp" + `
+public:
+  void RegisterCallback(std::function<void()> callback,
+                        const std::string& name = "")
+` + "```",
+			wantSignature: "void RegisterCallback(std::function<void()> callback, const std::string& name = \"\")",
+		},
+		{
+			name: "complex nested template parameters",
+			input: `### instance-method ` + "`ProcessData`" + `
+→ ` + "`void`" + `
+
+---
+` + "```cpp" + `
+public:
+  void ProcessData(std::function<bool(const std::vector<int>&)> validator,
+                   std::map<std::string, std::function<void()>> handlers,
+                   const ProcessOptions& options = {})
+` + "```",
+			wantSignature: "void ProcessData(std::function<bool(const std::vector<int>&)> validator, std::map<std::string, std::function<void()>> handlers, const ProcessOptions& options = {})",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := parseDocumentation(tt.input)
+			assertEqual(t, got.Signature, tt.wantSignature, "Signature")
+			assertEqual(t, got.AccessLevel, "public", "AccessLevel")
+		})
+	}
+}
+
 // TestComplexRealWorldExamples tests complex real-world hover responses
 func TestComplexRealWorldExamples(t *testing.T) {
 	// Test a complex template method with constraints
