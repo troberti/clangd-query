@@ -57,6 +57,12 @@ func TestShowCommand(t *testing.T) {
 		tc.AssertExitCode(result, 0)
 		tc.AssertContains(result.Stdout, "No symbols found matching \"NonExistentMethod\"")
 	})
+	
+	t.Run("Show non-existent class", func(t *testing.T) {
+		result := tc.RunCommand("show", "NonExistentClass")
+		tc.AssertExitCode(result, 0)
+		tc.AssertContains(result.Stdout, "No symbols found matching \"NonExistentClass\"")
+	})
 
 	// Additional test: Show Transform class
 	t.Run("Show Transform class", func(t *testing.T) {
@@ -79,5 +85,23 @@ func TestShowCommand(t *testing.T) {
 		tc.AssertContains(result.Stdout, "float x")
 		tc.AssertContains(result.Stdout, "float y")
 		tc.AssertContains(result.Stdout, "float z")
+	})
+	
+	// Test for large class with multiple inheritance
+	t.Run("Show large class with multiple inheritance completely", func(t *testing.T) {
+		result := tc.RunCommand("show", "LargeUIManager")
+		tc.AssertExitCode(result, 0)
+		// Should show the complete class from start to end
+		tc.AssertContains(result.Stdout, "class LargeUIManager : public UIEventDelegate")
+		// Check for early content
+		tc.AssertContains(result.Stdout, "void Initialize();")
+		// Check for middle content (inline method)
+		tc.AssertContains(result.Stdout, "void LoadResources() {")
+		tc.AssertContains(result.Stdout, "resources_loaded_ = true;")
+		// Check for late content (private members near the end)
+		tc.AssertContains(result.Stdout, "float update_time_accumulator_ = 0.0f;")
+		tc.AssertContains(result.Stdout, "std::vector<std::string> error_log_;")
+		// Most importantly, check for the closing brace
+		tc.AssertContains(result.Stdout, "};")
 	})
 }

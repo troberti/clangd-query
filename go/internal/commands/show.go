@@ -223,22 +223,41 @@ func Show(client *lsp.ClangdClient, query string, log logger.Logger) (string, er
 			// Use comments we already found
 			contextStart = commentStart
 
-			// Use folding range for the body
-			var classRange *lsp.FoldingRange
-			for _, foldRange := range foldingRanges {
-				if foldRange.StartLine >= startLine && foldRange.StartLine <= startLine+2 {
-					classRange = &foldRange
-					break
+			// For classes/structs/enums, get the exact range from document symbols
+			docSymbols, err := client.GetDocumentSymbols(loc.location.URI)
+			if err != nil {
+				return "", fmt.Errorf("failed to get document symbols: %v", err)
+			}
+			
+			// Find the symbol that matches our class
+			var findSymbol func([]lsp.DocumentSymbol) *lsp.DocumentSymbol
+			findSymbol = func(syms []lsp.DocumentSymbol) *lsp.DocumentSymbol {
+				for i := range syms {
+					s := &syms[i]
+					// Check if this symbol matches our position
+					if s.Range.Start.Line <= startLine && startLine <= s.Range.End.Line {
+						// Verify it's the right kind of symbol
+						if s.Kind == symbol.Kind {
+							return s
+						}
+						// Check children for nested classes
+						if len(s.Children) > 0 {
+							if found := findSymbol(s.Children); found != nil {
+								return found
+							}
+						}
+					}
 				}
+				return nil
 			}
-
-			if classRange != nil {
-				// For classes, show the complete implementation
-				contextEnd = classRange.EndLine
-			} else {
-				// If no folding range found, show a reasonable amount
-				contextEnd = min(startLine+100, len(lines)-1)
+			
+			classSymbol := findSymbol(docSymbols)
+			if classSymbol == nil {
+				return "", fmt.Errorf("could not find %s in document symbols", symbolKindName)
 			}
+			
+			// Use the full range from the document symbol
+			contextEnd = classSymbol.Range.End.Line
 		} else {
 			// For other symbol types (variables, typedefs, etc)
 			contextStart = commentStart
