@@ -11,7 +11,7 @@ clangd-query is a fast C++ code intelligence CLI tool designed specifically for 
 1. **Token-optimized output** - Concise, relevant results without unnecessary context
 2. **Semantic accuracy** - Understands C++ namespaces, overloads, templates, and inheritance
 3. **Fast responses** - Persistent daemon keeps clangd warm for instant queries
-4. **Complete context** - Intelligently shows both declarations and definitions
+4. **Show Source** - Show source code from classes and functions. For functions, it shows both declarations and definitions.
 
 ## Essential Commands
 
@@ -187,9 +187,8 @@ clangd-query interface Component
 
 ## Important Notes
 
-- The tool requires a `compile_commands.json` file in the project root
+- The tool requires a `CMakeLists.txt` file in the project root to create a `compile_commands.json` file.
 - First run in a project may be slower while clangd indexes
-- The daemon runs per-project and auto-manages itself
-- Works best with CMake projects that generate compile_commands.json
+- The daemon runs per-project and auto-manages itself. No need to explicitly shut it down.
 
 Remember: This tool gives you semantic understanding of C++ code. Use it instead of grep/find for any C++ exploration tasks!
