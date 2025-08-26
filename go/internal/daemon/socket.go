@@ -28,7 +28,7 @@ type LockInfo struct {
 // same project. The socket file is placed in the system's temporary directory.
 func GetSocketPath(projectRoot string) string {
 	hash := md5.Sum([]byte(projectRoot))
-	socketName := fmt.Sprintf("clangd-query-go-%x.sock", hash)
+	socketName := fmt.Sprintf("clangd-query-%x.sock", hash)
 	return filepath.Join(os.TempDir(), socketName)
 }
 
@@ -37,15 +37,15 @@ func GetSocketPath(projectRoot string) string {
 // about the running daemon instance. This file is used to detect if a daemon
 // is already running and whether it needs to be restarted.
 func GetLockPath(projectRoot string) string {
-	return filepath.Join(projectRoot, ".clangd-query-go.lock")
+	return filepath.Join(projectRoot, ".clangd-query.lock")
 }
 
 // Returns the path to the daemon log file for a given project.
-// The log file is stored in a .cache/clangd-query-go subdirectory within the
+// The log file is stored in a .cache/clangd-query subdirectory within the
 // project root. The cache directory is created if it doesn't exist. This log
 // file contains debug information and error messages from the daemon process.
 func GetLogPath(projectRoot string) string {
-	cacheDir := filepath.Join(projectRoot, ".cache", "clangd-query-go")
+	cacheDir := filepath.Join(projectRoot, ".cache", "clangd-query")
 	os.MkdirAll(cacheDir, 0755)
 	return filepath.Join(cacheDir, "daemon.log")
 }

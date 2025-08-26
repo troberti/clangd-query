@@ -8,8 +8,7 @@ import (
 	"clangd-query/internal/lsp"
 )
 
-// Search performs a workspace-wide symbol search and returns formatted text output.
-// The output format exactly matches the TypeScript implementation.
+// Performs a workspace-wide symbol search and returns formatted text output.
 func Search(client *lsp.ClangdClient, query string, limit int, log logger.Logger) (string, error) {
 	log.Info("Searching for symbols matching: %s (limit: %d)", query, limit)
 

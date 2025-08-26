@@ -12,7 +12,7 @@ import (
 
 // EnsureCompilationDatabase ensures compile_commands.json exists in the build directory
 func EnsureCompilationDatabase(projectRoot string, log logger.Logger) (string, error) {
-	buildDir := filepath.Join(projectRoot, ".cache", "clangd-query-go", "build")
+	buildDir := filepath.Join(projectRoot, ".cache", "clangd-query", "build")
 	compileCommandsPath := filepath.Join(buildDir, "compile_commands.json")
 
 	// Check if it already exists
