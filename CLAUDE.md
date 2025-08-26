@@ -72,6 +72,8 @@ type TestContext struct {
 }
 ```
 
+## Example of Bad Documentation
+
 IMPORTANT: AVOID comments like this where the class or function name is the start
 of the sentence. It just reads awkward.
 ```go
@@ -87,6 +89,27 @@ func TestComplexRealWorldExamples(t *testing.T) {
   ...  // ^^ GOOD
 }
 ```
+
+Also NEVER write these redundant implementation comments that are essentially
+repeating the code. Use implementation comments to notify the user of critical
+requirements and why a specific implementation is chosen. Essentially, try to
+answer the questions that a proficient reader of programming languages would have
+when reading your code.
+```go
+func formatLocation(client *lsp.ClangdClient, location lsp.Location) string {
+	// Extract path from URI
+	absolutePath := client.PathFromFileURI(location.URI)
+
+	// Make path relative
+	relativePath := client.ToRelativePath(absolutePath)
+
+	// Format with 1-based line and column numbers
+	return fmt.Sprintf("%s:%d:%d", relativePath,
+		location.Range.Start.Line+1,
+		location.Range.Start.Character+1)
+}
+```
+
 
 
 ### Avoid Terse Comments
