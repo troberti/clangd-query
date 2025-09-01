@@ -1,10 +1,8 @@
 # clangd-query
 
-Agents tend to have a hard time exploring C++ codebases and waste a lot tokens in their context window searching for declarations, definitions and source code. The header/source file structure of C-style languages does not help here.
+Agents tend to have a hard time exploring C++ codebases and waste a lot of tokens in their context window searching for declarations, definitions and source code. The header/source file structure of C-style languages does not help here.
 
-This tool is designed to help agents explore C++ code bases. It is a fast command-line tool and returns output in human/agent-readable format. It outputs both source code and `file:line:column` locations which the agents can then use to easily continue editing.
-
-`clangd-query` is a command-line tool and not an MCP, as agents seem to have an easier time using command-line tools. It uses a client/server architecture with the excellent clangd LSP to make it fast and keeps output to a minimum to save tokens.
+The `clangd-query` tool helps agents explore C++ codebases using the clangd LSP for indexing. It provides commands to search for symbols, view implementations, find usages, and show class hierarchies. The output includes both source code and `file:line:column` locations that agents can use to navigate directly to the relevant code. See the examples below.
 
 ## Examples
 
@@ -198,7 +196,7 @@ int GetWindowHeight() const
    ```bash
    ./build.sh
    ```
-4. The binary will be available at `bin/clangd-query`. Alternatively, you can use one of the prebuilt binaries in bin/releases (for macOS+Apple Silicon and Linux+Intel).
+4. The binary will be available at `bin/clangd-query`. Alternatively, you can use one of the prebuilt binaries in `bin/releases` (for macOS+Apple Silicon and Linux+Intel).
 5. I highly recommend creating a `clangd-query` symlink in your project root to the compiled binary, then @-link your agents to the AGENT.md file in this repository for instructions on how to use the tool.
 
 ## Other Commands
@@ -220,6 +218,8 @@ clangd-query --help
 ```
 
 ### Technical Details
+
+`clangd-query` is a command-line tool and not an MCP, as agents seem to have an easier time using command-line tools. It uses a client/server architecture to make it fast and keeps output to a minimum to save tokens.
 
 On first run, `clangd-query` starts a background daemon for your project. The tool looks for `CMakeLists.txt` the current directory and all its ancestor directories. The first one it finds is used as the project root. It then creates a `compile_commands.json` from the `CMakeLists.txt` and starts `clangd` to index the codebase.
 
