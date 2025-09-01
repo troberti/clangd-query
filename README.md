@@ -2,15 +2,16 @@
 
 Agents tend to have a hard time exploring C++ codebases and waste a lot tokens in their context window searching for declarations, definitions and source code. The header/source file structure of C-style languages does not help here.
 
-This tool is designed to help agents explore C++ code bases. It is a fast command-line tool and returns output in human/agent-readable format. It outputs both source code and file + line + column numbers which the agents can then use to easily continue editing.
+This tool is designed to help agents explore C++ code bases. It is a fast command-line tool and returns output in human/agent-readable format. It outputs both source code and `file:line:column` locations which the agents can then use to easily continue editing.
 
-`clangd-query` is a command-line tool and not an MCP, as agents seem to have an easier time using command-line tools. It uses the excellent clangd LSP to index C++ codebases. I highly recommend creating a `clangd-query` symlink in your project root to the compiled binary, then instruct your agents to read the AGENT.md file in this repository for instructions on how to use the tool.
+`clangd-query` is a command-line tool and not an MCP, as agents seem to have an easier time using command-line tools. It uses a client/server architecture with the excellent clangd LSP to make it fast and keeps output to a minimum to save tokens.
 
 ## Examples
 
 ### Searching for Symbols
 
 ```bash
+# Find the file+line position of a symbol
 $ clangd-query search GameObject
 Found 7 symbols matching "GameObject":
 
@@ -186,8 +187,8 @@ int GetWindowHeight() const
 
 - Go 1.21 or higher for building
 - `clangd` must be installed on your system. Version 15+ recommended for full feature support
-- CMake-based C++ project (for automatic compile_commands.json generation)
-- Your C++ project must have `CMakeLists.txt` at the root. The tool automatically detects your C++ project by looking for `CMakeLists.txt` in parent directories. Run commands from anywhere within your project tree.
+- CMake-based C++ project (for compile_commands.json generation).
+- Your C++ project must have `CMakeLists.txt` at the project root. The tool automatically detects your C++ project by looking for `CMakeLists.txt` in parent directories. Run `clangd-query` from anywhere within your project tree.
 
 ## Installation
 
@@ -197,8 +198,8 @@ int GetWindowHeight() const
    ```bash
    ./build.sh
    ```
-4. The binary will be available at `bin/clangd-query`
-
+4. The binary will be available at `bin/clangd-query`. Alternatively, you can use one of the prebuilt binaries in bin/releases (for macOS+Apple Silicon and Linux+Intel).
+5. I highly recommend creating a `clangd-query` symlink in your project root to the compiled binary, then @-link your agents to the AGENT.md file in this repository for instructions on how to use the tool.
 
 ## Other Commands
 
@@ -220,7 +221,7 @@ clangd-query --help
 
 ### Technical Details
 
-On first run, `clangd-query` starts a background daemon for your project. The tool looks for `CMakeLists.txt` the current directory and all its ancestor directories. The first one it finds is used as the project root. The daemon instance will start a clangd instance to index the codebase.
+On first run, `clangd-query` starts a background daemon for your project. The tool looks for `CMakeLists.txt` the current directory and all its ancestor directories. The first one it finds is used as the project root. It then creates a `compile_commands.json` from the `CMakeLists.txt` and starts `clangd` to index the codebase.
 
 Subsequent runs of the tool are fast as the daemon is already running. The daemon shuts down automatically after 30 minutes of being idle.
 
@@ -250,7 +251,6 @@ The daemon uses a lock file `<project-root>/.clangd-query.lock`. These are autom
 
 ### Daemon Log File
 Stored in  `.cache/clangd-query/daemon.log`. Can also be directly accessed using the `clangd-query logs` command as long as the daemon is running.
-
 
 ## License
 
