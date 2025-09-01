@@ -11,9 +11,8 @@ namespace game_engine {
 
 class Collider;
 
-/**
- * @brief Simple collision information
- */
+// Contains information about a collision between two colliders, including
+// the contact point, normal, and penetration depth.
 struct CollisionInfo {
   Collider* collider_a = nullptr;
   Collider* collider_b = nullptr;
@@ -22,9 +21,10 @@ struct CollisionInfo {
   float penetration_depth = 0.0f;
 };
 
-/**
- * @brief Manages physics simulation
- */
+// Manages the physics simulation for the game engine. This system handles
+// collision detection, collision resolution, gravity, and raycasting.
+// All physics objects must register their colliders with this system to
+// participate in the simulation.
 class PhysicsSystem {
  public:
   using CollisionCallback = std::function<void(const CollisionInfo&)>;
@@ -32,62 +32,48 @@ class PhysicsSystem {
   PhysicsSystem();
   ~PhysicsSystem();
 
-  /**
-   * @brief Initializes the physics system
-   * @return true if initialization succeeded
-   */
+  // Initializes the physics system and prepares it for simulation.
+  // Returns true if initialization was successful, false otherwise.
+  // Must be called before any physics operations can be performed.
   bool Initialize();
 
-  /**
-   * @brief Shuts down the physics system
-   */
+  // Shuts down the physics system and releases all resources.
+  // The system must be reinitialized before it can be used again.
   void Shutdown();
 
-  /**
-   * @brief Updates the physics simulation
-   * @param delta_time Time step for the simulation
-   */
+  // Advances the physics simulation by the specified time step. This method
+  // applies forces, updates velocities and positions, detects collisions,
+  // and resolves any collisions that occurred.
   void Update(float delta_time);
 
-  /**
-   * @brief Sets the global gravity
-   * @param gravity Gravity vector (default is (0, -9.81, 0))
-   */
+  // Sets the global gravity vector that affects all physics objects.
+  // The default gravity is (0, -9.81, 0) which simulates Earth gravity
+  // along the negative Y axis.
   void SetGravity(const Vector3& gravity) { gravity_ = gravity; }
 
-  /**
-   * @brief Gets the current gravity
-   * @return The gravity vector
-   */
+  // Returns the current global gravity vector.
   const Vector3& GetGravity() const { return gravity_; }
 
-  /**
-   * @brief Registers a collider with the physics system
-   * @param collider The collider to register
-   */
+  // Registers a collider with the physics system. Once registered, the
+  // collider will participate in collision detection and resolution during
+  // each physics update.
   void RegisterCollider(Collider* collider);
 
-  /**
-   * @brief Unregisters a collider
-   * @param collider The collider to unregister
-   */
+  // Removes a collider from the physics system. The collider will no longer
+  // participate in collision detection or resolution.
   void UnregisterCollider(Collider* collider);
 
-  /**
-   * @brief Sets the collision callback
-   * @param callback Function to call when collisions occur
-   */
+  // Sets a callback function that will be invoked whenever a collision
+  // occurs between two colliders. This allows game logic to respond to
+  // collision events.
   void SetCollisionCallback(CollisionCallback callback) {
     collision_callback_ = callback;
   }
 
-  /**
-   * @brief Performs a raycast
-   * @param origin Ray origin
-   * @param direction Ray direction (should be normalized)
-   * @param max_distance Maximum ray distance
-   * @return Optional collision info if hit occurred
-   */
+  // Casts a ray from the specified origin in the given direction and returns
+  // information about the first collision encountered, if any. The direction
+  // vector should be normalized. The ray extends up to max_distance units.
+  // Returns an empty optional if no collision was detected.
   std::optional<CollisionInfo> Raycast(
       const Vector3& origin,
       const Vector3& direction,

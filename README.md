@@ -1,24 +1,196 @@
 # clangd-query
 
-Fast C++ code intelligence CLI tool that provides instant access to semantic code navigation features through a persistent daemon architecture.
+Agents tend to have a hard time exploring C++ codebases and waste a lot tokens in their context window searching for declarations, definitions and source code. The header/source file structure of C-style languages does not help here.
 
-`clangd-query` leverages the clangd language server to provide IDE-quality code intelligence on the command line. Perfect for exploring large C++ codebases, integrating with scripts, or building development tools.
+This tool is designed to help agents explore C++ code bases. It is a fast command-line tool and returns output in human/agent-readable format. It outputs both source code and file + line + column numbers which the agents can then use to easily continue editing.
 
-## Features
+`clangd-query` is a command-line tool and not an MCP, as agents seem to have an easier time using command-line tools. It uses the excellent clangd LSP to index C++ codebases. I highly recommend creating a `clangd-query` symlink in your project root to the compiled binary, then instruct your agents to read the AGENT.md file in this repository for instructions on how to use the tool.
 
-- **Fast Startup**: Daemon architecture maintains warm clangd instance
-- **Semantic Search**: Find symbols by name with fuzzy matching
-- **Source Viewing**: View complete implementations of any symbol
-- **Jump to Definition**: Navigate to symbol definitions
-- **Find References**: Locate all usages of a symbol
-- **Class Hierarchy**: View complete inheritance trees with base and derived classes
-- **Function Signatures**: Display detailed function/method signatures with documentation
-- **Public Interface**: Show only public API of classes for quick reference
-- **Smart Output**: Human and AI-agent friendly formatting
+## Examples
+
+### Searching for Symbols
+
+```bash
+$ clangd-query search GameObject
+Found 7 symbols matching "GameObject":
+
+- `game_engine::GameObject` at include/core/game_object.h:26:7 [class]
+- `game_engine::GameObject::GameObject` at src/core/game_object.cpp:12:13 [constructor]
+- `game_engine::Engine::game_objects_` at include/core/engine.h:120:44 [field]
+- `game_engine::Engine::CreateGameObject` at src/core/engine.cpp:136:37 [method]
+- `game_engine::Engine::DestroyGameObject` at src/core/engine.cpp:142:14 [method]
+- `game_engine::Engine::GetGameObjects` at include/core/engine.h:94:51 [method]
+- `game_engine::GameObject::~GameObject` at src/core/game_object.cpp:17:13 [constructor]
+```
+
+### Show the complete source code of a Class or function
+
+``````bash
+# Show the full source code of a class
+$ clangd-query show GameObject
+Found class 'game_engine::GameObject' (7 matches total, showing most relevant)
+
+From include/core/game_object.h:26:7
+```cpp
+/**
+ * @brief Base class for all game objects in the engine
+ *
+ * GameObject represents any entity in the game world. It can contain
+ * multiple components that define its behavior and properties.
+ */
+class GameObject : public Updatable,
+                   public Renderable,
+                   public std::enable_shared_from_this<GameObject> {
+ public:
+  explicit GameObject(const std::string& name);
+  virtual ~GameObject();
+
+  // Updatable interface
+  void Update(float delta_time) override;
+  bool IsActive() const override { return active_; }
+
+  // Renderable interface
+  void Render(float interpolation) override;
+  int GetRenderPriority() const override { return render_priority_; }
+  bool IsVisible() const override { return visible_; }
+
+  <<<< Middle part omitted for brevity  >>>>
+
+ private:
+  static uint64_t next_id_;
+
+  uint64_t id_;
+  std::string name_;
+  bool active_ = true;
+  bool visible_ = true;
+  int render_priority_ = 0;
+  Transform transform_;
+  std::vector<std::shared_ptr<Component>> components_;
+};
+```
+``````
+
+
+``````bash
+# Shows the declaration AND definition of a function in one invocation, together
+# with the file locations.
+$ clangd-query show GameObject::Update
+Found method 'game_engine::GameObject::Update' (2 matches total, showing most relevant)
+
+From include/core/game_object.h:34:8 (declaration)
+```cpp
+  // Updatable interface
+  void Update(float delta_time) override;
+```
+
+From src/core/game_object.cpp:21:18 (definition)
+```cpp
+void GameObject::Update(float delta_time) {
+  if (!IsActive()) {
+    return;
+  }
+
+  // Call virtual update method
+  OnUpdate(delta_time);
+
+  // Update all components
+  for (auto& component : components_) {
+    if (component->IsActive()) {
+      component->Update(delta_time);
+    }
+  }
+}
+```
+``````
+
+
+### Viewing Class Hierarchies
+```bash
+# Show inheritance hierarchy for a class
+$ clangd-query hierarchy GameObject
+Inherits from:
+├── Renderable - include/core/interfaces.h:41
+└── Updatable - include/core/interfaces.h:18
+
+GameObject - include/core/game_object.h:26
+└── Character - include/game/character.h:9
+    ├── Enemy - include/game/enemy.h:9
+    └── Player - include/game/player.h:11
+```
+
+### Find Usages of a Symbol
+
+```bash
+# Find where a symbol is used in a code base
+$ clangd-query usages Transform::Translate
+Selected symbol: game_engine::Transform::Translate
+Found 3 references:
+
+- include/core/transform.h:84:8
+- src/components/rigidbody.cpp:45:13
+- src/game/character.cpp:47:18
+```
+
+## Reading the public interface of a class or struct
+```bash
+# View all public methods of a class and their comments
+$ clangd-query interface RenderSystem
+class game_engine::RenderSystem - include/systems/render_system.h:15:7
+
+Public Interface:
+
+RenderSystem()
+
+~RenderSystem()
+
+bool Initialize(int width, int height, const std::string& title)
+  Initializes the render system with the specified window dimensions and title.
+  Returns true if the render system was successfully initialized, false
+  otherwise. This must be called before any rendering operations can be
+  performed.
+
+void Shutdown()
+  Shuts down the render system and releases all associated resources. After
+  calling this, the render system must be reinitialized before use.
+
+void Render(float interpolation)
+  Renders all registered renderable objects to the screen. The interpolation
+  factor is used for smooth rendering between physics updates, allowing visual
+  positions to be interpolated for smoother motion.
+
+void RegisterRenderable(Renderable* renderable)
+  Registers a renderable object with the system. Once registered, the object
+  will be drawn during each render pass until it is unregistered.
+
+void UnregisterRenderable(Renderable* renderable)
+  Unregisters a renderable object from the system. The object will no longer be
+  drawn in subsequent render passes.
+
+void SetActiveCamera(std::shared_ptr<Camera> camera)
+  Sets the camera that will be used for rendering. All renderable objects will
+  be transformed and projected using this camera's view and projection matrices.
+
+std::shared_ptr<Camera> GetActiveCamera() const
+  Returns the currently active camera used for rendering. May return nullptr if
+  no camera has been set.
+
+int GetWindowWidth() const
+  Returns the current window width in pixels.
+
+int GetWindowHeight() const
+  Returns the current window height in pixels.
+```
+
+
+## Requirements
+
+- Go 1.21 or higher for building
+- `clangd` must be installed on your system. Version 15+ recommended for full feature support
+- CMake-based C++ project (for automatic compile_commands.json generation)
+- Your C++ project must have `CMakeLists.txt` at the root. The tool automatically detects your C++ project by looking for `CMakeLists.txt` in parent directories. Run commands from anywhere within your project tree.
 
 ## Installation
 
-### From source
 1. Clone this repository
 2. Make sure you have Go 1.21+ installed
 3. Build the binary:
@@ -27,63 +199,30 @@ Fast C++ code intelligence CLI tool that provides instant access to semantic cod
    ```
 4. The binary will be available at `bin/clangd-query`
 
-## Prerequisites
 
-- `clangd` must be installed on your system (or you can specify a custom path)
-- Your C++ project must have `CMakeLists.txt` at the root. The tool automatically detects your C++ project by looking for `CMakeLists.txt` in parent directories. Run commands from anywhere within your project tree.
-
-
-
-## Usage
-
-### Basic Commands
+## Other Commands
 
 ```bash
-# Search for symbols
-clangd-query search Scene
-clangd-query search "LoadResources" --limit 10
-
-# View complete source code
-clangd-query view SceneManager
-clangd-query view "View::SetSize"
-
-# Find all references
-clangd-query usages Scene::StartScene
-clangd-query usages include/widget.h:100:8
-
-# Show class hierarchy
-clangd-query hierarchy Scene
-clangd-query hierarchy View
-
-# Show function signatures
-clangd-query signature SetTitleForState
-clangd-query signature View::SetSize
-
-# Show public interface of a class
-clangd-query interface ResourceManager
-clangd-query interface View
-
 # Check daemon status
 clangd-query status
 
-# Stop the daemon
+# Show all logs of the daemon. Use --verbose, --info (the default) or --error to
+# filter on log entries.
+clangd-query logs
+
+# Quits the daemon process. This is not required as the daemon shutdown
+# automatically after idling for too long.
 clangd-query shutdown
+
+# Shows help output of the tool.
+clangd-query --help
 ```
 
-### Options
+### Technical Details
 
-- `--limit <n>` - Limit search results (default: 20)
-- `--timeout <seconds>` - Set request timeout (default: 30)
-- `--help` - Show help for command
+On first run, `clangd-query` starts a background daemon for your project. The tool looks for `CMakeLists.txt` the current directory and all its ancestor directories. The first one it finds is used as the project root. The daemon instance will start a clangd instance to index the codebase.
 
-### How It Works
-
-1. **First Run**: Automatically starts a background daemon for your project
-2. **Daemon Process**: Maintains persistent clangd instance with warm index
-3. **Fast Queries**: Subsequent queries are near-instantaneous
-4. **Auto-Cleanup**: Daemon shuts down after 30 minutes of inactivity
-
-### Architecture
+Subsequent runs of the tool are fast as the daemon is already running. The daemon shuts down automatically after 30 minutes of being idle.
 
 ```
 ┌─────────────┐       JSON-RPC        ┌──────────────┐
@@ -98,168 +237,28 @@ clangd-query shutdown
                                        └──────────┘
 ```
 
-### Environment Variables
+#### Compilation Database
 
-- `CLANGD_DAEMON_TIMEOUT` - Idle timeout in seconds (default: 1800)
-- `CLANGD_PATH` - Path to clangd executable (defaults to system `clangd`)
+The tool will build a `compile_commands.json` from the `CMakeLists.txt`, which must be in the project root. This is used by clangd to index the codebase. The database is stored in `.cache/clangd-query/build/compile_commands.json`.
 
-## Examples
-
-### Finding and Viewing Code
-
-```bash
-# Find all scene-related classes
-$ clangd-query search Scene
-Found 12 symbols matching "Scene":
-- `class Scene` at clients/flare/src/base/scene.h:45:7
-- `class SceneManager` at clients/flare/src/base/scenemanager.cc:18:6
-- `class ModalScene` at clients/src/phoenix2/scenes/modalscene.h:12:8
-...
-
-# View the SceneManager implementation
-$ clangd-query view SceneManager
-Found class 'SceneManager' at clients/flare/src/base/scenemanager.cc:18:6
-
-```cpp
-class SceneManager {
-public:
-  SceneManager() : active_scene_(nullptr) {
-    // ... full implementation ...
-  }
-  // ... complete class shown ...
-};
-```
-
-### Navigating Code
-
-```bash
-# Find all usages of a class
-$ clangd-query usages Scene
-Found 23 references to 'Scene':
-- clients/src/phoenix2/game.cpp:15:8
-- clients/src/phoenix2/scenes/menuscene.cc:34:12
-...
-```
-
-### Viewing Class Hierarchies
-
-```bash
-# Show inheritance hierarchy for a class
-$ clangd-query hierarchy Scene
-Inherits from:
-├── MouseInputHandling - clients/flare/include/flare/base/ui/mouse.h:37
-├── KeyboardStateDelegate - clients/flare/include/flare/base/ui/keyboard.h:209
-├── TouchInputHandling - clients/flare/include/flare/base/ui/touch.h:59
-├── ControllerInputHandling - clients/flare/include/flare/base/ui/controller.h:48
-└── KeyboardInputHandling - clients/flare/include/flare/base/ui/keyboard.h:166
-
-Scene - clients/flare/include/flare/base/scene.h:237
-├── InterfaceScene - clients/src/phoenix2/scenes/interfacescene.h:60
-│   ├── MenuScene - clients/src/phoenix2/scenes/menuscene.h:180
-│   ├── SettingsScene - clients/src/phoenix2/scenes/settingsscene.h:102
-│   └── LoginScene - clients/src/phoenix2/scenes/loginscene.h:100
-├── GameScene - clients/src/phoenix2/scenes/gamescene.h:264
-├── AccountScene - clients/src/phoenix2/scenes/accountscene.h:109
-└── RootScene - clients/src/phoenix2/scenes/rootscene.h:140
-```
-
-### Function Signatures with Documentation
-
-```bash
-# Show all signatures for a function/method
-$ clangd-query signature LoadResources
-
-LoadResources - clients/flare/include/flare/base/scene.h:273:16
-
-public:
-  virtual void LoadResources(ResourceManager* manager)
-
-Return Type: void
-
-Parameters:
-  - manager: ResourceManager* - The resource manager instance
-
-Description:
-  Load all resources that this scene will use. This method is called on the
-  resource manager's dispatch queue before the scene starts. Override this to
-  load your scene-specific resources.
-
-Modifiers: virtual
-
-────────────────────────────────────────────────────────────────────────────────
-
-LoadResources - clients/src/phoenix2/scenes/gamescene.h:287:8
-
-protected:
-  virtual void LoadResources(ResourceManager* manager) override
-
-Return Type: void
-
-Parameters:
-  - manager: ResourceManager* - The resource manager for loading resources
-
-Modifiers: virtual, override
-```
-
-## Troubleshooting
-
-### Daemon Issues
-
-If the daemon crashes or becomes unresponsive:
-```bash
-# Check status
-clangd-query status
-
-# Force shutdown and restart
-clangd-query shutdown
-clangd-query search test  # Will auto-restart daemon
-```
-
-## Debugging and logging
-
-Use the --debug flag when issuing a command to get the debug output directly before the output of the command itself. Useful for quick checks on result.
-
-To view the last logs from the daemon, use the `logs` command with the optional `--limit X` parameter.
-```bash
-clangd-query logs
-```
-
-
-### First Run Slowness
-
-The first query in a project may take longer as clangd indexes your codebase. Subsequent queries will be fast. You can check indexing status with:
-```bash
-clangd-query status
-```
+### Index
+The clangd index is stored in `.cache/clangd-query/build/.cache/clangd`
 
 ### Lock Files
 
-The daemon uses lock files at `<project-root>/.clangd-query.lock`. These are automatically cleaned up but can be manually removed if needed.
+The daemon uses a lock file `<project-root>/.clangd-query.lock`. These are automatically cleaned when the daemon shuts down.
 
-### Compilation Database
+### Daemon Log File
+Stored in  `.cache/clangd-query/daemon.log`. Can also be directly accessed using the `clangd-query logs` command as long as the daemon is running.
 
-The tool will build a `compile_commands.json` from the `CMakeLists.txt`, which must be in the project root. This is used by clangd to index the codebase.
-
-## Technical Details
-
-- **Compilation Database**: Cached in `.cache/clangd-query/build/compile_commands.json`
-- **Index Location**: `.cache/clangd-query/build/.cache/clangd/index/`
-- **Socket Location**: System temp directory
-- **Log Files**: `.cache/clangd-query/daemon.log`
-
-## Requirements
-
-- Go 1.21 or higher
-- clangd 12 or higher (15+ recommended for full feature support)
-- CMake-based C++ project (for automatic compile_commands.json generation)
 
 ## License
 
 MIT License - see [LICENSE](LICENSE) file for details.
 
-## Contributing
+## In Development
 
-Contributions are welcome! Please feel free to submit issues and pull requests.
+This tool is under active development and suggestions and feedback is welcome.
 
 ## Acknowledgments
 

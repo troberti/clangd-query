@@ -8,9 +8,8 @@
 
 namespace game_engine {
 
-/**
- * @brief Keyboard key codes
- */
+// Enumeration of all supported keyboard keys. These codes are used to
+// identify which key triggered an input event.
 enum class KeyCode {
   Unknown = 0,
   A, B, C, D, E, F, G, H, I, J, K, L, M,
@@ -23,9 +22,7 @@ enum class KeyCode {
   Count
 };
 
-/**
- * @brief Mouse button codes
- */
+// Enumeration of mouse button identifiers.
 enum class MouseButton {
   Left = 0,
   Right,
@@ -33,9 +30,10 @@ enum class MouseButton {
   Count
 };
 
-/**
- * @brief Manages input from keyboard and mouse
- */
+// Manages all keyboard and mouse input for the game engine. This system
+// tracks the current state of all keys and mouse buttons, detects state
+// changes (just pressed/released), and provides callback mechanisms for
+// input event handling.
 class InputSystem {
  public:
   using KeyCallback = std::function<void(KeyCode, bool)>;
@@ -45,75 +43,56 @@ class InputSystem {
   InputSystem();
   ~InputSystem();
 
-  /**
-   * @brief Updates the input system
-   */
+  // Updates the input system's internal state. This should be called once
+  // per frame to properly track just-pressed and just-released states.
   void Update();
 
-  /**
-   * @brief Checks if a key is currently pressed
-   * @param key The key to check
-   * @return true if the key is pressed
-   */
+  // Checks whether the specified key is currently being held down.
+  // Returns true as long as the key remains pressed.
   bool IsKeyPressed(KeyCode key) const;
 
-  /**
-   * @brief Checks if a key was just pressed this frame
-   * @param key The key to check
-   * @return true if the key was just pressed
-   */
+  // Checks whether the specified key was pressed down during this frame.
+  // Returns true only on the frame when the key transitions from released
+  // to pressed state.
   bool IsKeyJustPressed(KeyCode key) const;
 
-  /**
-   * @brief Checks if a key was just released this frame
-   * @param key The key to check
-   * @return true if the key was just released
-   */
+  // Checks whether the specified key was released during this frame.
+  // Returns true only on the frame when the key transitions from pressed
+  // to released state.
   bool IsKeyJustReleased(KeyCode key) const;
 
-  /**
-   * @brief Checks if a mouse button is pressed
-   * @param button The button to check
-   * @return true if the button is pressed
-   */
+  // Checks whether the specified mouse button is currently being held down.
+  // Returns true as long as the button remains pressed.
   bool IsMouseButtonPressed(MouseButton button) const;
 
-  /**
-   * @brief Gets the mouse position
-   * @return Pair of (x, y) coordinates
-   */
+  // Returns the current mouse cursor position as a pair of (x, y) coordinates
+  // in screen space.
   std::pair<float, float> GetMousePosition() const {
     return {mouse_x_, mouse_y_};
   }
 
-  /**
-   * @brief Gets the mouse delta movement
-   * @return Pair of (dx, dy) movement
-   */
+  // Returns the mouse movement delta since the last frame as a pair of
+  // (dx, dy) values. Useful for implementing camera controls or dragging.
   std::pair<float, float> GetMouseDelta() const {
     return {mouse_dx_, mouse_dy_};
   }
 
-  /**
-   * @brief Registers a key callback
-   * @param callback Function to call on key events
-   */
+  // Registers a callback function that will be invoked whenever a key
+  // state changes. The callback receives the key code and whether it
+  // was pressed or released.
   void RegisterKeyCallback(KeyCallback callback) {
     key_callbacks_.push_back(callback);
   }
 
-  /**
-   * @brief Registers a mouse button callback
-   * @param callback Function to call on mouse button events
-   */
+  // Registers a callback function that will be invoked whenever a mouse
+  // button state changes. The callback receives the button identifier
+  // and whether it was pressed or released.
   void RegisterMouseButtonCallback(MouseButtonCallback callback) {
     mouse_button_callbacks_.push_back(callback);
   }
 
-  /**
-   * @brief Registers a mouse move callback
-   * @param callback Function to call on mouse movement
-   */
+  // Registers a callback function that will be invoked whenever the mouse
+  // cursor moves. The callback receives the new x and y coordinates.
   void RegisterMouseMoveCallback(MouseMoveCallback callback) {
     mouse_move_callbacks_.push_back(callback);
   }

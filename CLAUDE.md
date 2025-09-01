@@ -11,23 +11,8 @@ This file provides guidance to Claude Code when working on the clangd-query proj
 ## Daemon Development Rules
 
 ### Logging is MANDATORY
-- In the daemon code, ALWAYS use the logger for ALL messages (errors, warnings, info)
-- Never return errors without logging them first
-- This ensures all issues are visible in the daemon logs for debugging
-
-Example:
-```go
-// WRONG - error not logged
-if input == "" {
-    return nil, fmt.Errorf("search requires an input parameter")
-}
-
-// CORRECT - error is logged before returning
-if input == "" {
-    d.logger.Error("search requires an input parameter")
-    return nil, fmt.Errorf("search requires an input parameter")
-}
-```
+In the daemon code, ALWAYS use the logger for ALL messages (errors, warnings, info)
+instead of stdin or stderr
 
 EVEYR ERROR THAT IS HANDLED MUST BE LOGGED! There cannot be any errors that are
 discarded without log messages anywhere in the daemon process.
@@ -52,7 +37,8 @@ Write comprehensive documentation for all Go code using proper prose, not terse 
 type ParsedDocumentation struct {
     // The cleaned documentation text without technical details like size/offset/alignment
     // information. Contains the human-readable documentation that explains what a symbol
-    // does, typically extracted from doc comments like @brief or plain documentation text.
+    // does.
+    //
     // Line breaks and formatting are preserved where meaningful.
     Description string
 }
@@ -94,7 +80,7 @@ Also NEVER write these redundant implementation comments that are essentially
 repeating the code. Use implementation comments to notify the user of critical
 requirements and why a specific implementation is chosen. Essentially, try to
 answer the questions that a proficient reader of programming languages would have
-when reading your code.
+when reading your code. So do not do this:
 ```go
 func formatLocation(client *lsp.ClangdClient, location lsp.Location) string {
 	// Extract path from URI
@@ -110,30 +96,31 @@ func formatLocation(client *lsp.ClangdClient, location lsp.Location) string {
 }
 ```
 
-
-
-### Avoid Terse Comments
-Don't write minimal comments like:
+But structure it like so:
 ```go
-// Description is the description  // BAD - says nothing useful
-Description string
-
-// Returns the value  // BAD - obvious from signature
-func GetValue() int
+// Formats the path of the `location` as a "file:line:column" string. The column
+// value is 1-based.
+func formatLocation(client *lsp.ClangdClient, location lsp.Location) string {
+	absolutePath := client.PathFromFileURI(location.URI)
+	relativePath := client.ToRelativePath(absolutePath)
+	return fmt.Sprintf("%s:%d:%d", relativePath,
+		location.Range.Start.Line+1,
+		location.Range.Start.Character+1)
+}
 ```
+
 
 ## Code Organization
 - `internal/client/` - Client-side code for CLI interactions
 - `internal/daemon/` - Daemon process that manages clangd
-- `internal/lsp/` - LSP protocol implementation for clangd communication
-- `internal/commands/` - Command implementations
+- `internal/clangd/` - Classes to interact with the clangd process
+- `internal/commands/` - Command implementations, includes output formatting
 - `internal/logger/` - Logging interface and implementations
 
+
 ## Code Formatting
-- All Go code MUST be formatted with `gofmt` before committing
-- Run `./format_go.sh` to automatically format all Go source files
-- The formatting script will tell you if any files were modified
-- This ensures consistent code style across the entire Go codebase
+Run `./format_go.sh` to automatically format all Go source files use gofmt.
+The formatting script will tell you if any files were modified.
 
 ## CRITICAL: Working Directory Rules
 **YOU MUST ALWAYS STAY IN THE PROJECT ROOT DIRECTORY!**
@@ -146,17 +133,18 @@ func GetValue() int
 
 ## Testing & Debugging
 - Always test commands after making changes
-- Use the test fixture project in `test/fixtures/sample-project` via the scripts
+- Use the test fixture project in `test/fixtures/sample-project` via the `./test.sh`
+  script.
 - Verify both successful operations and error cases
 - For debugging: Use the logger and examine logs with `./test.sh logs --verbose`
 - NEVER create debug files or test programs
 
-## Common Commands for Testing
+## Common Commands for Development
 ```bash
 # Format Go code before committing
 ./format_go.sh
 
-# Build the project
+# Build the binary in bin/clangd-query
 ./build.sh
 
 # Test basic functionality in the example testing code base. This runs
@@ -165,23 +153,6 @@ func GetValue() int
 ./test.sh show GameObject
 ./test.sh logs --verbose
 ```
-
-## Error Handling
-- Log errors at the point they occur
-- Return meaningful error messages to the client
-- Use structured logging where possible
-
-## Performance Considerations
-- The daemon should start quickly and cache clangd connections
-- Use in-memory log buffers to avoid excessive file I/O
-- Implement timeouts for all network operations
-
-
-## Development
-
-Use `./test.sh` to run the clangd-query tool against the test source database.
-
-ONLY use this tool when developing.
 
 ## Testing
 
