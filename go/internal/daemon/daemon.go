@@ -87,7 +87,8 @@ func Run(config *Config) {
 		os.Exit(1)
 	}
 
-	// Write lock file
+	// Claim the project early so concurrent clients see a live daemon PID while
+	// cmake/indexing still run. Readiness for RPC is still the socket below.
 	if err := WriteLockFile(config.ProjectRoot, os.Getpid(), daemon.socketPath); err != nil {
 		daemon.logger.Error("Failed to write lock file: %v", err)
 		os.Exit(1)
@@ -110,15 +111,6 @@ func Run(config *Config) {
 	}
 	defer daemon.clangdClient.Stop()
 
-	// Setup file watcher
-	daemon.fileWatcher, err = NewFileWatcher(config.ProjectRoot, daemon.onFilesChanged, daemon.logger)
-	if err != nil {
-		daemon.logger.Error("Failed to setup file watcher: %v", err)
-		// Continue without file watching
-	} else {
-		defer daemon.fileWatcher.Stop()
-	}
-
 	daemon.logger.Info("Waiting for clangd background indexing to complete")
 	daemon.clangdClient.WaitForIndexing()
 	daemon.logger.Info("Clangd background indexing complete")
@@ -129,7 +121,9 @@ func Run(config *Config) {
 	// Setup signal handlers
 	daemon.setupSignalHandlers()
 
-	// Start socket server
+	// Start the socket server before file watching. Large projects can take a long
+	// time to register every directory with fsnotify, and clients must be able to
+	// connect as soon as clangd is ready.
 	if err := daemon.startSocketServer(); err != nil {
 		daemon.logger.Error("Failed to start socket server: %v", err)
 		os.Exit(1)
@@ -137,10 +131,36 @@ func Run(config *Config) {
 
 	daemon.logger.Info("Daemon started successfully")
 
+	go daemon.setupFileWatcher(config.ProjectRoot)
+
 	// Wait for shutdown
 	<-daemon.shutdown
 
 	daemon.logger.Info("Daemon shutting down")
+
+	daemon.mu.Lock()
+	fw := daemon.fileWatcher
+	daemon.fileWatcher = nil
+	daemon.mu.Unlock()
+	if fw != nil {
+		if err := fw.Stop(); err != nil {
+			daemon.logger.Error("Failed to stop file watcher: %v", err)
+		}
+	}
+}
+
+// Registers filesystem watches in the background so startup is not blocked on
+// walking very large project trees.
+func (d *Daemon) setupFileWatcher(projectRoot string) {
+	fw, err := NewFileWatcher(projectRoot, d.onFilesChanged, d.logger)
+	if err != nil {
+		d.logger.Error("Failed to setup file watcher: %v", err)
+		return
+	}
+
+	d.mu.Lock()
+	d.fileWatcher = fw
+	d.mu.Unlock()
 }
 
 func (d *Daemon) setupLogging(verbose bool) error {
