@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"clangd-query/internal/clangd"
@@ -126,13 +127,14 @@ func wordWrap(text string, maxWidth int) []string {
 
 // Formats a complete location with file path, line, and column numbers for display.
 // The URI is converted to a relative path from the project root, and line/column
-// numbers are converted from 0-based to 1-based indexing for editor compatibility
+// numbers are converted from 0-based to 1-based indexing for editor compatibility.
+// Paths always use forward slashes so output is stable across platforms.
 func formatLocation(client *clangd.ClangdClient, location clangd.Location) string {
 	// Extract path from URI
 	absolutePath := client.PathFromFileURI(location.URI)
 
 	// Make path relative
-	relativePath := client.ToRelativePath(absolutePath)
+	relativePath := filepath.ToSlash(client.ToRelativePath(absolutePath))
 
 	// Format with 1-based line and column numbers
 	return fmt.Sprintf("%s:%d:%d", relativePath,
@@ -142,12 +144,13 @@ func formatLocation(client *clangd.ClangdClient, location clangd.Location) strin
 
 // Formats a file location with just the path and line number (no column).
 // This simpler format is used when column information is not relevant or available.
-// The URI is converted to a relative path and the line number to 1-based indexing
+// The URI is converted to a relative path and the line number to 1-based indexing.
+// Paths always use forward slashes so output is stable across platforms.
 func formatLocationSimple(client *clangd.ClangdClient, uri string, line int) string {
 	// Convert URI to path
 	absolutePath := client.PathFromFileURI(uri)
 	// Make path relative
-	relativePath := client.ToRelativePath(absolutePath)
+	relativePath := filepath.ToSlash(client.ToRelativePath(absolutePath))
 	return fmt.Sprintf("%s:%d", relativePath, line+1)
 }
 
