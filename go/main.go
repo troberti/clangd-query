@@ -18,6 +18,7 @@ type Config struct {
 	Timeout     int
 	Help        bool
 	ProjectRoot string
+	ClangdPath  string
 }
 
 func parseArgs(args []string) (*Config, error) {
@@ -60,7 +61,7 @@ func parseArgs(args []string) (*Config, error) {
 		}
 
 		// Handle global flags with values
-		if arg == "--limit" || arg == "--timeout" {
+		if arg == "--limit" || arg == "--timeout" || arg == "--clangd-path" {
 			if i+1 >= len(args) {
 				return nil, fmt.Errorf("flag %s requires a value", arg)
 			}
@@ -80,6 +81,8 @@ func parseArgs(args []string) (*Config, error) {
 					return nil, fmt.Errorf("invalid timeout value: %s", value)
 				}
 				config.Timeout = timeout
+			case "--clangd-path":
+				config.ClangdPath = value
 			}
 			i += 2
 			continue
@@ -112,10 +115,11 @@ Commands:
   shutdown                    Shutdown the daemon
 
 Flags:
-  --limit <n>      Limit number of results
-  --verbose        Enable verbose output
-  --timeout <s>    Request timeout in seconds (default: 30)
-  --help           Show this help message
+  --limit <n>           Limit number of results
+  --verbose             Enable verbose output
+  --timeout <s>         Request timeout in seconds (default: 30)
+  --clangd-path <path>  Path to the clangd executable (default: clangd from PATH)
+  --help                Show this help message
 
 Examples:
   clangd-query search Widget
@@ -140,12 +144,30 @@ func findProjectRoot(startDir string) (string, error) {
 	return "", fmt.Errorf("no CMakeLists.txt found in any parent directory")
 }
 
-func runDaemon(projectRoot string, verbose bool) {
-	config := &daemon.Config{
-		ProjectRoot: projectRoot,
-		Verbose:     verbose,
+func runDaemon(config daemon.Config) {
+	daemon.Run(&config)
+}
+
+func parseDaemonArgs(args []string) (daemon.Config, error) {
+	config := daemon.Config{}
+
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch arg {
+		case "--verbose", "-v":
+			config.Verbose = true
+		case "--clangd-path":
+			if i+1 >= len(args) {
+				return config, fmt.Errorf("flag %s requires a value", arg)
+			}
+			config.ClangdPath = args[i+1]
+			i++
+		default:
+			return config, fmt.Errorf("unknown daemon flag: %s", arg)
+		}
 	}
-	daemon.Run(config)
+
+	return config, nil
 }
 
 func runClient(config *Config) {
@@ -156,6 +178,7 @@ func runClient(config *Config) {
 		Verbose:     config.Verbose,
 		Timeout:     config.Timeout,
 		ProjectRoot: config.ProjectRoot,
+		ClangdPath:  config.ClangdPath,
 	}
 
 	if err := client.Run(clientConfig); err != nil {
@@ -172,15 +195,13 @@ func main() {
 			os.Exit(1)
 		}
 		projectRoot := os.Args[2]
-		verbose := false
-		// Check for --verbose flag
-		for i := 3; i < len(os.Args); i++ {
-			if os.Args[i] == "--verbose" || os.Args[i] == "-v" {
-				verbose = true
-				break
-			}
+		daemonConfig, err := parseDaemonArgs(os.Args[3:])
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
 		}
-		runDaemon(projectRoot, verbose)
+		daemonConfig.ProjectRoot = projectRoot
+		runDaemon(daemonConfig)
 		return
 	}
 

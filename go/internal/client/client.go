@@ -20,6 +20,7 @@ type Config struct {
 	Verbose     bool
 	Timeout     int
 	ProjectRoot string
+	ClangdPath  string
 }
 
 // Client handles communication with the daemon
@@ -324,7 +325,7 @@ func Run(config *Config) error {
 	}
 
 	if needStart {
-		if err := startDaemon(projectRoot, config.Verbose); err != nil {
+		if err := startDaemon(config); err != nil {
 			return fmt.Errorf("failed to start daemon: %v", err)
 		}
 
@@ -355,8 +356,8 @@ func Run(config *Config) error {
 	return nil
 }
 
-func startDaemon(projectRoot string, verbose bool) error {
-	if verbose {
+func startDaemon(config *Config) error {
+	if config.Verbose {
 		fmt.Fprintf(os.Stderr, "Starting daemon...\n")
 	}
 
@@ -367,15 +368,18 @@ func startDaemon(projectRoot string, verbose bool) error {
 	}
 
 	// Start daemon as background process
-	args := []string{"daemon", projectRoot}
-	if verbose {
+	args := []string{"daemon", config.ProjectRoot}
+	if config.Verbose {
 		args = append(args, "--verbose")
+	}
+	if config.ClangdPath != "" {
+		args = append(args, "--clangd-path", config.ClangdPath)
 	}
 	cmd := exec.Command(execPath, args...)
 	configureDetachedProcess(cmd)
 
 	// Redirect output to daemon log
-	logPath := daemon.GetLogPath(projectRoot)
+	logPath := daemon.GetLogPath(config.ProjectRoot)
 	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
 		return err
@@ -393,7 +397,7 @@ func startDaemon(projectRoot string, verbose bool) error {
 	go cmd.Wait()
 
 	// Wait for daemon to be ready
-	socketPath := daemon.GetSocketPath(projectRoot)
+	socketPath := daemon.GetSocketPath(config.ProjectRoot)
 	for i := 0; i < 50; i++ { // 5 seconds timeout
 		if _, err := os.Stat(socketPath); err == nil {
 			// Socket exists, try to connect

@@ -19,6 +19,7 @@ import (
 type Config struct {
 	ProjectRoot string
 	Verbose     bool
+	ClangdPath  string
 }
 
 // Daemon manages the clangd process and handles client connections
@@ -102,7 +103,7 @@ func Run(config *Config) {
 
 	// Start clangd
 	daemon.logger.Info("Starting clangd with build directory: %s", buildDir)
-	daemon.clangdClient, err = clangd.NewClangdClient(config.ProjectRoot, buildDir, daemon.logger)
+	daemon.clangdClient, err = clangd.NewClangdClient(config.ProjectRoot, buildDir, config.ClangdPath, daemon.logger)
 	if err != nil {
 		daemon.logger.Error("Failed to start clangd: %v", err)
 		os.Exit(1)

@@ -116,11 +116,18 @@ func (c *ClangdClient) PathFromFileURI(uri string) string {
 // This function starts the clangd subprocess, establishes LSP communication,
 // and waits for initial indexing to complete. The buildDir should contain
 // a compile_commands.json file for accurate code intelligence.
-func NewClangdClient(projectRoot, buildDir string, log logger.Logger) (*ClangdClient, error) {
-	// Find clangd executable
-	clangdPath, err := exec.LookPath("clangd")
-	if err != nil {
-		return nil, fmt.Errorf("clangd not found in PATH")
+//
+// When clangdPath is non-empty, that executable is used directly. Otherwise
+// clangd is resolved from PATH.
+func NewClangdClient(projectRoot, buildDir, clangdPath string, log logger.Logger) (*ClangdClient, error) {
+	if clangdPath == "" {
+		var err error
+		clangdPath, err = exec.LookPath("clangd")
+		if err != nil {
+			return nil, fmt.Errorf("clangd not found in PATH")
+		}
+	} else if _, err := os.Stat(clangdPath); err != nil {
+		return nil, fmt.Errorf("clangd executable not found at %s: %v", clangdPath, err)
 	}
 
 	// Start clangd process
