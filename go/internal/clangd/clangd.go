@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -58,19 +59,26 @@ func (c *ClangdClient) ToRelativePath(absolutePath string) string {
 }
 
 // Converts a file path to a proper file URI.
-// The path is first converted to an absolute path if needed.
+// The path is first converted to an absolute path if needed. On Windows, paths
+// are normalized to the three-slash form (file:///C:/...) that clangd uses.
 func (c *ClangdClient) FileURIFromPath(filePath string) string {
-	absolutePath := c.ToAbsolutePath(filePath)
-	// Properly encode the path as a file URI
+	absolutePath := filepath.Clean(c.ToAbsolutePath(filePath))
+	slashPath := filepath.ToSlash(absolutePath)
+
+	if runtime.GOOS == "windows" && len(slashPath) >= 2 && slashPath[1] == ':' {
+		slashPath = "/" + slashPath
+	}
+
 	u := &url.URL{
 		Scheme: "file",
-		Path:   absolutePath,
+		Path:   slashPath,
 	}
 	return u.String()
 }
 
 // Extracts the file path from a file URI.
-// Properly handles URL encoding (e.g., %20 for spaces, %2B for +).
+// Properly handles URL encoding (e.g., %20 for spaces, %2B for +) and converts
+// Windows drive-letter paths (file:///C:/...) to native paths (C:\...).
 func (c *ClangdClient) PathFromFileURI(uri string) string {
 	if !strings.HasPrefix(uri, "file://") {
 		// Not a file URI, return as-is
@@ -84,8 +92,24 @@ func (c *ClangdClient) PathFromFileURI(uri string) string {
 		return strings.TrimPrefix(uri, "file://")
 	}
 
-	// The path is already decoded by url.Parse
-	return u.Path
+	path := u.Path
+	if runtime.GOOS == "windows" {
+		// Two-slash form: file://C:/path puts the drive letter in Host.
+		if u.Host != "" {
+			if len(u.Host) == 2 && u.Host[1] == ':' {
+				return filepath.FromSlash(u.Host + path)
+			}
+			// UNC path: file://server/share/...
+			return filepath.FromSlash("\\\\" + u.Host + path)
+		}
+		// Three-slash form: file:///C:/path arrives as /C:/path in Path.
+		if len(path) >= 3 && path[0] == '/' && path[2] == ':' {
+			path = path[1:]
+		}
+		return filepath.FromSlash(path)
+	}
+
+	return path
 }
 
 // Creates and initializes a new clangd client for the given project.
