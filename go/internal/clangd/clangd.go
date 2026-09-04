@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -22,19 +23,22 @@ import (
 // references, and symbols. The client maintains the lifecycle of the clangd process and
 // tracks which documents are open to optimize clangd's memory usage.
 type ClangdClient struct {
-	cmd           *exec.Cmd
-	transport     *Transport
-	ProjectRoot   string // Exported for commands to access
-	buildDir      string
-	indexingDone  chan struct{}
-	isIndexing    bool
-	indexingMu    sync.RWMutex
-	openDocuments map[string]bool
-	docMu         sync.RWMutex
-	capabilities  *ServerCapabilities
-	timeout       time.Duration
-	logger        logger.Logger
+	cmd             *exec.Cmd
+	transport       *Transport
+	ProjectRoot     string // Exported for commands to access
+	buildDir        string
+	indexingDone    chan struct{}
+	isIndexing      bool
+	indexingMu      sync.RWMutex
+	openDocuments   map[string]bool
+	docMu           sync.RWMutex
+	capabilities    *ServerCapabilities
+	timeout         time.Duration
+	indexingTimeout time.Duration
+	logger          logger.Logger
 }
+
+const backgroundIndexProgressToken = "backgroundIndexProgress"
 
 // Path helper methods
 
@@ -58,19 +62,26 @@ func (c *ClangdClient) ToRelativePath(absolutePath string) string {
 }
 
 // Converts a file path to a proper file URI.
-// The path is first converted to an absolute path if needed.
+// The path is first converted to an absolute path if needed. On Windows, paths
+// are normalized to the three-slash form (file:///C:/...) that clangd uses.
 func (c *ClangdClient) FileURIFromPath(filePath string) string {
-	absolutePath := c.ToAbsolutePath(filePath)
-	// Properly encode the path as a file URI
+	absolutePath := filepath.Clean(c.ToAbsolutePath(filePath))
+	slashPath := filepath.ToSlash(absolutePath)
+
+	if runtime.GOOS == "windows" && len(slashPath) >= 2 && slashPath[1] == ':' {
+		slashPath = "/" + slashPath
+	}
+
 	u := &url.URL{
 		Scheme: "file",
-		Path:   absolutePath,
+		Path:   slashPath,
 	}
 	return u.String()
 }
 
 // Extracts the file path from a file URI.
-// Properly handles URL encoding (e.g., %20 for spaces, %2B for +).
+// Properly handles URL encoding (e.g., %20 for spaces, %2B for +) and converts
+// Windows drive-letter paths (file:///C:/...) to native paths (C:\...).
 func (c *ClangdClient) PathFromFileURI(uri string) string {
 	if !strings.HasPrefix(uri, "file://") {
 		// Not a file URI, return as-is
@@ -84,19 +95,42 @@ func (c *ClangdClient) PathFromFileURI(uri string) string {
 		return strings.TrimPrefix(uri, "file://")
 	}
 
-	// The path is already decoded by url.Parse
-	return u.Path
+	path := u.Path
+	if runtime.GOOS == "windows" {
+		// Two-slash form: file://C:/path puts the drive letter in Host.
+		if u.Host != "" {
+			if len(u.Host) == 2 && u.Host[1] == ':' {
+				return filepath.FromSlash(u.Host + path)
+			}
+			// UNC path: file://server/share/...
+			return filepath.FromSlash("\\\\" + u.Host + path)
+		}
+		// Three-slash form: file:///C:/path arrives as /C:/path in Path.
+		if len(path) >= 3 && path[0] == '/' && path[2] == ':' {
+			path = path[1:]
+		}
+		return filepath.FromSlash(path)
+	}
+
+	return path
 }
 
 // Creates and initializes a new clangd client for the given project.
 // This function starts the clangd subprocess, establishes LSP communication,
 // and waits for initial indexing to complete. The buildDir should contain
 // a compile_commands.json file for accurate code intelligence.
-func NewClangdClient(projectRoot, buildDir string, log logger.Logger) (*ClangdClient, error) {
-	// Find clangd executable
-	clangdPath, err := exec.LookPath("clangd")
-	if err != nil {
-		return nil, fmt.Errorf("clangd not found in PATH")
+//
+// When clangdPath is non-empty, that executable is used directly. Otherwise
+// clangd is resolved from PATH.
+func NewClangdClient(projectRoot, buildDir, clangdPath string, log logger.Logger) (*ClangdClient, error) {
+	if clangdPath == "" {
+		var err error
+		clangdPath, err = exec.LookPath("clangd")
+		if err != nil {
+			return nil, fmt.Errorf("clangd not found in PATH")
+		}
+	} else if _, err := os.Stat(clangdPath); err != nil {
+		return nil, fmt.Errorf("clangd executable not found at %s: %v", clangdPath, err)
 	}
 
 	// Start clangd process
@@ -129,14 +163,15 @@ func NewClangdClient(projectRoot, buildDir string, log logger.Logger) (*ClangdCl
 	transport := NewTransport(stdoutPipe, stdinPipe, os.Stderr)
 
 	client := &ClangdClient{
-		cmd:           cmd,
-		transport:     transport,
-		ProjectRoot:   projectRoot,
-		buildDir:      buildDir,
-		indexingDone:  make(chan struct{}),
-		openDocuments: make(map[string]bool),
-		timeout:       30 * time.Second,
-		logger:        log,
+		cmd:             cmd,
+		transport:       transport,
+		ProjectRoot:     projectRoot,
+		buildDir:        buildDir,
+		indexingDone:    make(chan struct{}),
+		openDocuments:   make(map[string]bool),
+		timeout:         30 * time.Second,
+		indexingTimeout: indexingTimeoutFromEnv(),
+		logger:          log,
 	}
 
 	// Start goroutine to parse clangd stderr
@@ -205,6 +240,10 @@ func (c *ClangdClient) initialize() error {
 					DynamicRegistration: false,
 				},
 			},
+			Window: WindowClientCapabilities{
+				WorkDoneProgress:               true,
+				ImplicitWorkDoneProgressCreate: true,
+			},
 		},
 	}
 
@@ -225,11 +264,6 @@ func (c *ClangdClient) initialize() error {
 		return err
 	}
 
-	// Mark indexing as started
-	c.indexingMu.Lock()
-	c.isIndexing = true
-	c.indexingMu.Unlock()
-
 	// Open first source file to trigger indexing
 	// This is required for workspace/symbol queries to work
 	// See: https://github.com/clangd/clangd/discussions/1339
@@ -245,23 +279,6 @@ func (c *ClangdClient) initialize() error {
 		c.logger.Info("Warning: No source file found to trigger initial indexing - workspace/symbol queries may not work")
 	}
 
-	// Set indexing timeout
-	go func() {
-		time.Sleep(5 * time.Second)
-		c.indexingMu.Lock()
-		defer c.indexingMu.Unlock()
-		if c.isIndexing {
-			c.isIndexing = false
-			// Use sync.Once or similar pattern would be better, but for now just be careful
-			select {
-			case <-c.indexingDone:
-				// Already closed
-			default:
-				close(c.indexingDone)
-			}
-		}
-	}()
-
 	return nil
 }
 
@@ -272,24 +289,57 @@ func (c *ClangdClient) handleProgress(params json.RawMessage) {
 		return
 	}
 
+	if !isBackgroundIndexProgress(progress) {
+		return
+	}
+
 	c.indexingMu.Lock()
 	defer c.indexingMu.Unlock()
 
-	if progress.Value.Kind == "begin" && strings.Contains(strings.ToLower(progress.Value.Title), "index") {
-		if !c.isIndexing {
-			c.isIndexing = true
+	switch progress.Value.Kind {
+	case "begin":
+		c.isIndexing = true
+		c.logger.Info("Background indexing started")
+	case "report":
+		if progress.Value.Message != "" {
+			c.logger.Debug("Background indexing: %s", progress.Value.Message)
 		}
-	} else if progress.Value.Kind == "end" {
-		if c.isIndexing {
-			c.isIndexing = false
-			select {
-			case <-c.indexingDone:
-				// Already closed
-			default:
-				close(c.indexingDone)
-			}
-		}
+	case "end":
+		c.isIndexing = false
+		c.logger.Info("Background indexing finished")
+		c.signalIndexingDoneLocked()
 	}
+}
+
+// Returns true when the progress notification belongs to clangd's background
+// indexer rather than some unrelated long-running operation.
+func isBackgroundIndexProgress(progress ProgressParams) bool {
+	if token, ok := progress.Token.(string); ok && token == backgroundIndexProgressToken {
+		return true
+	}
+	return strings.Contains(strings.ToLower(progress.Value.Title), "index")
+}
+
+func (c *ClangdClient) signalIndexingDoneLocked() {
+	select {
+	case <-c.indexingDone:
+	default:
+		close(c.indexingDone)
+	}
+}
+
+// indexingTimeoutFromEnv returns the maximum time to wait for background indexing.
+// Large projects can take several minutes on the first run.
+func indexingTimeoutFromEnv() time.Duration {
+	const defaultTimeout = 15 * time.Minute
+	timeoutStr := os.Getenv("CLANGD_INDEXING_TIMEOUT")
+	if timeoutStr == "" {
+		return defaultTimeout
+	}
+	if timeout, err := time.ParseDuration(timeoutStr); err == nil {
+		return timeout
+	}
+	return defaultTimeout
 }
 
 // handleDiagnostics handles diagnostic notifications from clangd
@@ -302,13 +352,78 @@ func (c *ClangdClient) handleLogMessage(params json.RawMessage) {
 	// We ignore log messages for now
 }
 
-// WaitForIndexing waits for clangd to finish indexing
+// WaitForIndexing blocks until clangd reports that background indexing has
+// finished, or until indexingTimeout elapses.
+//
+// The JSON-RPC transport only reads clangd stdout while a request is in flight.
+// Background indexing progress arrives as notifications on stdout, so we must
+// keep issuing lightweight requests until indexing completes; otherwise clangd's
+// stdout pipe fills up and background indexing stalls.
 func (c *ClangdClient) WaitForIndexing() {
 	select {
 	case <-c.indexingDone:
-	case <-time.After(5 * time.Second):
-		// Timeout - assume indexing is done or not needed
+		return
+	default:
 	}
+
+	stopDrain := make(chan struct{})
+	go c.drainTransportUntil(stopDrain)
+
+	// When the on-disk index is already current, clangd may not emit any
+	// background-indexing progress. Only apply this fallback while stdout is
+	// being drained so progress notifications are not stuck unread in the pipe.
+	go func() {
+		time.Sleep(3 * time.Second)
+		c.indexingMu.Lock()
+		defer c.indexingMu.Unlock()
+		if !c.isIndexing {
+			c.logger.Debug("No background indexing progress observed, assuming index is ready")
+			c.signalIndexingDoneLocked()
+		}
+	}()
+
+	select {
+	case <-c.indexingDone:
+	case <-time.After(c.indexingTimeout):
+		c.logger.Info("Timed out waiting for background indexing after %v, proceeding anyway", c.indexingTimeout)
+	}
+
+	close(stopDrain)
+}
+
+// Keeps the JSON-RPC transport reading clangd stdout until stop is closed.
+// Any open document is enough for the lightweight poll request.
+func (c *ClangdClient) drainTransportUntil(stop <-chan struct{}) {
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-stop:
+			return
+		case <-ticker.C:
+			uri := c.anyOpenDocumentURI()
+			if uri == "" {
+				continue
+			}
+			_, err := c.sendRequest("textDocument/documentSymbol", DocumentSymbolParams{
+				TextDocument: TextDocumentIdentifier{URI: uri},
+			})
+			if err != nil {
+				return
+			}
+		}
+	}
+}
+
+// Returns the URI of any document currently open in clangd.
+func (c *ClangdClient) anyOpenDocumentURI() string {
+	c.docMu.RLock()
+	defer c.docMu.RUnlock()
+	for uri := range c.openDocuments {
+		return uri
+	}
+	return ""
 }
 
 // Sends a request to clangd and waits for the response.

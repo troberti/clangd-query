@@ -53,7 +53,7 @@ func Show(client *clangd.ClangdClient, query string, log logger.Logger) (string,
 
 		// Determine if the symbol location is a definition or declaration
 		symbolHasBody, _ := hasBody(symbolPath, symbol.Location.Range.Start.Line)
-		symbolIsInSourceFile := regexp.MustCompile(`\.(cc|cpp|cxx|c\+\+)$`).MatchString(strings.ToLower(symbolPath))
+		symbolIsInSourceFile := regexp.MustCompile(`\.(c|cc|cpp|cxx|c\+\+)$`).MatchString(strings.ToLower(symbolPath))
 
 		// In source files, it's almost always a definition
 		// In header files, check if it has a body

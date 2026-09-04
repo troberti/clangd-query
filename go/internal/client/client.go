@@ -20,6 +20,9 @@ type Config struct {
 	Verbose     bool
 	Timeout     int
 	ProjectRoot string
+	BuildDir    string
+	CMakePreset string
+	ClangdPath  string
 }
 
 // Client handles communication with the daemon
@@ -302,6 +305,10 @@ func Run(config *Config) error {
 		return fmt.Errorf("failed to read lock file: %v", err)
 	}
 
+	if config.Command == "shutdown" {
+		return runShutdown(config, lockInfo)
+	}
+
 	needStart := false
 	if lockInfo == nil {
 		needStart = true
@@ -314,13 +321,17 @@ func Run(config *Config) error {
 		if config.Verbose {
 			fmt.Fprintf(os.Stderr, "Stopping stale daemon (PID %d)...\n", lockInfo.PID)
 		}
-		syscall.Kill(lockInfo.PID, syscall.SIGTERM)
+		if p, err := os.FindProcess(lockInfo.PID); err != nil {
+			return err
+		} else {
+			p.Signal(syscall.SIGTERM)
+		}
 		time.Sleep(500 * time.Millisecond)
 		needStart = true
 	}
 
 	if needStart {
-		if err := startDaemon(projectRoot, config.Verbose); err != nil {
+		if err := startDaemon(config); err != nil {
 			return fmt.Errorf("failed to start daemon: %v", err)
 		}
 
@@ -331,8 +342,8 @@ func Run(config *Config) error {
 		}
 	}
 
-	// Connect to daemon
-	conn, err := net.Dial("unix", lockInfo.SocketPath)
+	// Connect to daemon, retrying while the process is still starting up.
+	conn, err := dialDaemon(lockInfo)
 	if err != nil {
 		return fmt.Errorf("failed to connect to daemon: %v", err)
 	}
@@ -351,8 +362,76 @@ func Run(config *Config) error {
 	return nil
 }
 
-func startDaemon(projectRoot string, verbose bool) error {
-	if verbose {
+// Handles the shutdown command without starting a daemon when none is running.
+// When a lock file exists but refers to a dead process, stale artifacts are
+// cleaned up and the command succeeds immediately.
+func runShutdown(config *Config, lockInfo *daemon.LockInfo) error {
+	projectRoot := config.ProjectRoot
+
+	if lockInfo == nil {
+		fmt.Println("No daemon running")
+		return nil
+	}
+
+	if !daemon.IsProcessAlive(lockInfo.PID) {
+		daemon.RemoveLockFile(projectRoot)
+		daemon.CleanupSocket(lockInfo.SocketPath)
+		fmt.Println("No daemon running")
+		return nil
+	}
+
+	if daemon.IsDaemonStale(lockInfo) {
+		if config.Verbose {
+			fmt.Fprintf(os.Stderr, "Stopping stale daemon (PID %d)...\n", lockInfo.PID)
+		}
+		if p, err := os.FindProcess(lockInfo.PID); err != nil {
+			return err
+		} else {
+			p.Signal(syscall.SIGTERM)
+		}
+		time.Sleep(500 * time.Millisecond)
+		daemon.RemoveLockFile(projectRoot)
+		daemon.CleanupSocket(lockInfo.SocketPath)
+		fmt.Println("Daemon shutdown initiated")
+		return nil
+	}
+
+	conn, err := dialDaemon(lockInfo)
+	if err != nil {
+		return fmt.Errorf("failed to connect to daemon: %v", err)
+	}
+	defer conn.Close()
+
+	client := NewClient(conn, time.Duration(config.Timeout)*time.Second)
+	output, err := client.handleCommand(config)
+	if err != nil {
+		return err
+	}
+	fmt.Println(output)
+	return nil
+}
+
+// dials the daemon socket, retrying while the lock file process is alive but the
+// listener is not ready yet.
+func dialDaemon(lockInfo *daemon.LockInfo) (net.Conn, error) {
+	for i := 0; i < 50; i++ {
+		conn, err := net.Dial("unix", lockInfo.SocketPath)
+		if err == nil {
+			return conn, nil
+		}
+
+		if !daemon.IsProcessAlive(lockInfo.PID) {
+			return nil, err
+		}
+
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	return nil, fmt.Errorf("daemon is running (PID %d) but not accepting connections", lockInfo.PID)
+}
+
+func startDaemon(config *Config) error {
+	if config.Verbose {
 		fmt.Fprintf(os.Stderr, "Starting daemon...\n")
 	}
 
@@ -363,19 +442,24 @@ func startDaemon(projectRoot string, verbose bool) error {
 	}
 
 	// Start daemon as background process
-	args := []string{"daemon", projectRoot}
-	if verbose {
+	args := []string{"daemon", config.ProjectRoot}
+	if config.Verbose {
 		args = append(args, "--verbose")
 	}
-	cmd := exec.Command(execPath, args...)
-
-	// Detach from current process group
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Setpgid: true,
+	if config.BuildDir != "" {
+		args = append(args, "--build-dir", config.BuildDir)
 	}
+	if config.CMakePreset != "" {
+		args = append(args, "--cmake-preset", config.CMakePreset)
+	}
+	if config.ClangdPath != "" {
+		args = append(args, "--clangd-path", config.ClangdPath)
+	}
+	cmd := exec.Command(execPath, args...)
+	configureDetachedProcess(cmd)
 
 	// Redirect output to daemon log
-	logPath := daemon.GetLogPath(projectRoot)
+	logPath := daemon.GetLogPath(config.ProjectRoot)
 	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
 		return err
@@ -392,11 +476,12 @@ func startDaemon(projectRoot string, verbose bool) error {
 	// Don't wait for it - let it run in background
 	go cmd.Wait()
 
-	// Wait for daemon to be ready
-	socketPath := daemon.GetSocketPath(projectRoot)
-	for i := 0; i < 50; i++ { // 5 seconds timeout
+	// Wait for daemon to be ready. The first startup can take a long time while
+	// cmake runs and clangd performs background indexing before opening the socket.
+	socketPath := daemon.GetSocketPath(config.ProjectRoot)
+	deadline := time.Now().Add(daemonStartupTimeout())
+	for time.Now().Before(deadline) {
 		if _, err := os.Stat(socketPath); err == nil {
-			// Socket exists, try to connect
 			if conn, err := net.Dial("unix", socketPath); err == nil {
 				conn.Close()
 				return nil
@@ -406,4 +491,18 @@ func startDaemon(projectRoot string, verbose bool) error {
 	}
 
 	return fmt.Errorf("daemon failed to start within timeout")
+}
+
+// daemonStartupTimeout is how long the client waits for a newly spawned daemon
+// to finish initialization and open its socket.
+func daemonStartupTimeout() time.Duration {
+	const defaultTimeout = 15 * time.Minute
+	timeoutStr := os.Getenv("CLANGD_STARTUP_TIMEOUT")
+	if timeoutStr == "" {
+		return defaultTimeout
+	}
+	if timeout, err := time.ParseDuration(timeoutStr); err == nil {
+		return timeout
+	}
+	return defaultTimeout
 }
