@@ -19,6 +19,8 @@ import (
 type Config struct {
 	ProjectRoot string
 	Verbose     bool
+	BuildDir    string
+	CMakePreset string
 	ClangdPath  string
 }
 
@@ -96,7 +98,10 @@ func Run(config *Config) {
 	defer RemoveLockFile(config.ProjectRoot)
 
 	// Ensure compilation database exists
-	buildDir, err := EnsureCompilationDatabase(config.ProjectRoot, daemon.logger)
+	buildDir, err := EnsureCompilationDatabase(config.ProjectRoot, CompilationOptions{
+		BuildDir:    config.BuildDir,
+		CMakePreset: config.CMakePreset,
+	}, daemon.logger)
 	if err != nil {
 		daemon.logger.Error("Failed to find compilation database: %v", err)
 		os.Exit(1)

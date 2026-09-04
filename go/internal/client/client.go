@@ -20,6 +20,8 @@ type Config struct {
 	Verbose     bool
 	Timeout     int
 	ProjectRoot string
+	BuildDir    string
+	CMakePreset string
 	ClangdPath  string
 }
 
@@ -443,6 +445,12 @@ func startDaemon(config *Config) error {
 	args := []string{"daemon", config.ProjectRoot}
 	if config.Verbose {
 		args = append(args, "--verbose")
+	}
+	if config.BuildDir != "" {
+		args = append(args, "--build-dir", config.BuildDir)
+	}
+	if config.CMakePreset != "" {
+		args = append(args, "--cmake-preset", config.CMakePreset)
 	}
 	if config.ClangdPath != "" {
 		args = append(args, "--clangd-path", config.ClangdPath)

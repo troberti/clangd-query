@@ -18,6 +18,8 @@ type Config struct {
 	Timeout     int
 	Help        bool
 	ProjectRoot string
+	BuildDir    string
+	CMakePreset string
 	ClangdPath  string
 }
 
@@ -61,7 +63,7 @@ func parseArgs(args []string) (*Config, error) {
 		}
 
 		// Handle global flags with values
-		if arg == "--limit" || arg == "--timeout" || arg == "--clangd-path" {
+		if arg == "--limit" || arg == "--timeout" || arg == "--build-dir" || arg == "--cmake-preset" || arg == "--clangd-path" {
 			if i+1 >= len(args) {
 				return nil, fmt.Errorf("flag %s requires a value", arg)
 			}
@@ -81,6 +83,10 @@ func parseArgs(args []string) (*Config, error) {
 					return nil, fmt.Errorf("invalid timeout value: %s", value)
 				}
 				config.Timeout = timeout
+			case "--build-dir":
+				config.BuildDir = value
+			case "--cmake-preset":
+				config.CMakePreset = value
 			case "--clangd-path":
 				config.ClangdPath = value
 			}
@@ -118,6 +124,8 @@ Flags:
   --limit <n>           Limit number of results
   --verbose             Enable verbose output
   --timeout <s>         Request timeout in seconds (default: 30)
+  --build-dir <path>    Use compile_commands.json from this build directory
+  --cmake-preset <name> Configure the project with this CMake preset
   --clangd-path <path>  Path to the clangd executable (default: clangd from PATH)
   --help                Show this help message
 
@@ -125,7 +133,8 @@ Examples:
   clangd-query search Widget
   clangd-query show GameScene::update
   clangd-query usages src/main.cpp:42:15
-  clangd-query hierarchy BaseClass --limit 10`)
+  clangd-query hierarchy BaseClass --limit 10
+  clangd-query search WPL_Start_AP --cmake-preset flexspi_nor_debug`)
 }
 
 func findProjectRoot(startDir string) (string, error) {
@@ -156,11 +165,18 @@ func parseDaemonArgs(args []string) (daemon.Config, error) {
 		switch arg {
 		case "--verbose", "-v":
 			config.Verbose = true
-		case "--clangd-path":
+		case "--build-dir", "--cmake-preset", "--clangd-path":
 			if i+1 >= len(args) {
 				return config, fmt.Errorf("flag %s requires a value", arg)
 			}
-			config.ClangdPath = args[i+1]
+			switch arg {
+			case "--build-dir":
+				config.BuildDir = args[i+1]
+			case "--cmake-preset":
+				config.CMakePreset = args[i+1]
+			case "--clangd-path":
+				config.ClangdPath = args[i+1]
+			}
 			i++
 		default:
 			return config, fmt.Errorf("unknown daemon flag: %s", arg)
@@ -178,6 +194,8 @@ func runClient(config *Config) {
 		Verbose:     config.Verbose,
 		Timeout:     config.Timeout,
 		ProjectRoot: config.ProjectRoot,
+		BuildDir:    config.BuildDir,
+		CMakePreset: config.CMakePreset,
 		ClangdPath:  config.ClangdPath,
 	}
 
