@@ -168,7 +168,11 @@ func (d *Daemon) checkExistingDaemon() error {
 			if IsDaemonStale(lockInfo) {
 				d.logger.Info("Existing daemon is stale, attempting to stop it")
 				// Try to gracefully stop the old daemon
-				syscall.Kill(lockInfo.PID, syscall.SIGTERM)
+				if p, err := os.FindProcess(lockInfo.PID); err != nil {
+					return err
+				} else {
+					p.Signal(syscall.SIGTERM)
+				}
 				time.Sleep(100 * time.Millisecond)
 			} else {
 				return fmt.Errorf("daemon already running with PID %d", lockInfo.PID)

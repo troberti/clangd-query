@@ -314,7 +314,11 @@ func Run(config *Config) error {
 		if config.Verbose {
 			fmt.Fprintf(os.Stderr, "Stopping stale daemon (PID %d)...\n", lockInfo.PID)
 		}
-		syscall.Kill(lockInfo.PID, syscall.SIGTERM)
+		if p, err := os.FindProcess(lockInfo.PID); err != nil {
+			return err
+		} else {
+			p.Signal(syscall.SIGTERM)
+		}
 		time.Sleep(500 * time.Millisecond)
 		needStart = true
 	}
@@ -368,11 +372,7 @@ func startDaemon(projectRoot string, verbose bool) error {
 		args = append(args, "--verbose")
 	}
 	cmd := exec.Command(execPath, args...)
-
-	// Detach from current process group
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Setpgid: true,
-	}
+	configureDetachedProcess(cmd)
 
 	// Redirect output to daemon log
 	logPath := daemon.GetLogPath(projectRoot)

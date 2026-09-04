@@ -3,3 +3,4 @@
 test/fixtures/sample-project/build
 test/fixtures/sample-project/.cache
 bin/clangd-query
+bin/clangd-query.exe
