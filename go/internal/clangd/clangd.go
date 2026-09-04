@@ -33,9 +33,12 @@ type ClangdClient struct {
 	openDocuments map[string]bool
 	docMu         sync.RWMutex
 	capabilities  *ServerCapabilities
-	timeout       time.Duration
-	logger        logger.Logger
+	timeout         time.Duration
+	indexingTimeout time.Duration
+	logger          logger.Logger
 }
+
+const backgroundIndexProgressToken = "backgroundIndexProgress"
 
 // Path helper methods
 
@@ -160,14 +163,15 @@ func NewClangdClient(projectRoot, buildDir, clangdPath string, log logger.Logger
 	transport := NewTransport(stdoutPipe, stdinPipe, os.Stderr)
 
 	client := &ClangdClient{
-		cmd:           cmd,
-		transport:     transport,
-		ProjectRoot:   projectRoot,
-		buildDir:      buildDir,
-		indexingDone:  make(chan struct{}),
-		openDocuments: make(map[string]bool),
-		timeout:       30 * time.Second,
-		logger:        log,
+		cmd:             cmd,
+		transport:       transport,
+		ProjectRoot:     projectRoot,
+		buildDir:        buildDir,
+		indexingDone:    make(chan struct{}),
+		openDocuments:   make(map[string]bool),
+		timeout:         30 * time.Second,
+		indexingTimeout: indexingTimeoutFromEnv(),
+		logger:          log,
 	}
 
 	// Start goroutine to parse clangd stderr
@@ -236,6 +240,10 @@ func (c *ClangdClient) initialize() error {
 					DynamicRegistration: false,
 				},
 			},
+			Window: WindowClientCapabilities{
+				WorkDoneProgress:               true,
+				ImplicitWorkDoneProgressCreate: true,
+			},
 		},
 	}
 
@@ -256,11 +264,6 @@ func (c *ClangdClient) initialize() error {
 		return err
 	}
 
-	// Mark indexing as started
-	c.indexingMu.Lock()
-	c.isIndexing = true
-	c.indexingMu.Unlock()
-
 	// Open first source file to trigger indexing
 	// This is required for workspace/symbol queries to work
 	// See: https://github.com/clangd/clangd/discussions/1339
@@ -276,20 +279,16 @@ func (c *ClangdClient) initialize() error {
 		c.logger.Info("Warning: No source file found to trigger initial indexing - workspace/symbol queries may not work")
 	}
 
-	// Set indexing timeout
+	// When the on-disk index is already current, clangd may not emit any
+	// background-indexing progress. Unblock WaitForIndexing after a short grace
+	// period so startup does not hang in that case.
 	go func() {
-		time.Sleep(5 * time.Second)
+		time.Sleep(3 * time.Second)
 		c.indexingMu.Lock()
 		defer c.indexingMu.Unlock()
-		if c.isIndexing {
-			c.isIndexing = false
-			// Use sync.Once or similar pattern would be better, but for now just be careful
-			select {
-			case <-c.indexingDone:
-				// Already closed
-			default:
-				close(c.indexingDone)
-			}
+		if !c.isIndexing {
+			c.logger.Debug("No background indexing progress observed, assuming index is ready")
+			c.signalIndexingDoneLocked()
 		}
 	}()
 
@@ -303,24 +302,57 @@ func (c *ClangdClient) handleProgress(params json.RawMessage) {
 		return
 	}
 
+	if !isBackgroundIndexProgress(progress) {
+		return
+	}
+
 	c.indexingMu.Lock()
 	defer c.indexingMu.Unlock()
 
-	if progress.Value.Kind == "begin" && strings.Contains(strings.ToLower(progress.Value.Title), "index") {
-		if !c.isIndexing {
-			c.isIndexing = true
+	switch progress.Value.Kind {
+	case "begin":
+		c.isIndexing = true
+		c.logger.Info("Background indexing started")
+	case "report":
+		if progress.Value.Message != "" {
+			c.logger.Debug("Background indexing: %s", progress.Value.Message)
 		}
-	} else if progress.Value.Kind == "end" {
-		if c.isIndexing {
-			c.isIndexing = false
-			select {
-			case <-c.indexingDone:
-				// Already closed
-			default:
-				close(c.indexingDone)
-			}
-		}
+	case "end":
+		c.isIndexing = false
+		c.logger.Info("Background indexing finished")
+		c.signalIndexingDoneLocked()
 	}
+}
+
+// Returns true when the progress notification belongs to clangd's background
+// indexer rather than some unrelated long-running operation.
+func isBackgroundIndexProgress(progress ProgressParams) bool {
+	if token, ok := progress.Token.(string); ok && token == backgroundIndexProgressToken {
+		return true
+	}
+	return strings.Contains(strings.ToLower(progress.Value.Title), "index")
+}
+
+func (c *ClangdClient) signalIndexingDoneLocked() {
+	select {
+	case <-c.indexingDone:
+	default:
+		close(c.indexingDone)
+	}
+}
+
+// indexingTimeoutFromEnv returns the maximum time to wait for background indexing.
+// Large projects can take several minutes on the first run.
+func indexingTimeoutFromEnv() time.Duration {
+	const defaultTimeout = 15 * time.Minute
+	timeoutStr := os.Getenv("CLANGD_INDEXING_TIMEOUT")
+	if timeoutStr == "" {
+		return defaultTimeout
+	}
+	if timeout, err := time.ParseDuration(timeoutStr); err == nil {
+		return timeout
+	}
+	return defaultTimeout
 }
 
 // handleDiagnostics handles diagnostic notifications from clangd
@@ -333,12 +365,13 @@ func (c *ClangdClient) handleLogMessage(params json.RawMessage) {
 	// We ignore log messages for now
 }
 
-// WaitForIndexing waits for clangd to finish indexing
+// WaitForIndexing blocks until clangd reports that background indexing has
+// finished, or until indexingTimeout elapses.
 func (c *ClangdClient) WaitForIndexing() {
 	select {
 	case <-c.indexingDone:
-	case <-time.After(5 * time.Second):
-		// Timeout - assume indexing is done or not needed
+	case <-time.After(c.indexingTimeout):
+		c.logger.Info("Timed out waiting for background indexing after %v, proceeding anyway", c.indexingTimeout)
 	}
 }
 

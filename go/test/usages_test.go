@@ -13,7 +13,7 @@ func TestUsagesCommand(t *testing.T) {
 		tc.AssertExitCode(result, 0)
 		// Should show the selected symbol and references
 		tc.AssertContains(result.Stdout, "Selected symbol: game_engine::GameObject")
-		tc.AssertContains(result.Stdout, "Found 33 references:")
+		tc.AssertContains(result.Stdout, "Found 36 references:")
 		// Check for some key references
 		tc.AssertContains(result.Stdout, "include/core/game_object.h:")
 		tc.AssertContains(result.Stdout, "include/game/character.h:") // Character inherits from GameObject

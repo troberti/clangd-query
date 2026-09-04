@@ -119,6 +119,10 @@ func Run(config *Config) {
 		defer daemon.fileWatcher.Stop()
 	}
 
+	daemon.logger.Info("Waiting for clangd background indexing to complete")
+	daemon.clangdClient.WaitForIndexing()
+	daemon.logger.Info("Clangd background indexing complete")
+
 	// Setup idle timeout
 	daemon.setupIdleTimeout()
 
