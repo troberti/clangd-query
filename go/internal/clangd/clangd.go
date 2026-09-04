@@ -23,16 +23,16 @@ import (
 // references, and symbols. The client maintains the lifecycle of the clangd process and
 // tracks which documents are open to optimize clangd's memory usage.
 type ClangdClient struct {
-	cmd           *exec.Cmd
-	transport     *Transport
-	ProjectRoot   string // Exported for commands to access
-	buildDir      string
-	indexingDone  chan struct{}
-	isIndexing    bool
-	indexingMu    sync.RWMutex
-	openDocuments map[string]bool
-	docMu         sync.RWMutex
-	capabilities  *ServerCapabilities
+	cmd             *exec.Cmd
+	transport       *Transport
+	ProjectRoot     string // Exported for commands to access
+	buildDir        string
+	indexingDone    chan struct{}
+	isIndexing      bool
+	indexingMu      sync.RWMutex
+	openDocuments   map[string]bool
+	docMu           sync.RWMutex
+	capabilities    *ServerCapabilities
 	timeout         time.Duration
 	indexingTimeout time.Duration
 	logger          logger.Logger
@@ -279,19 +279,6 @@ func (c *ClangdClient) initialize() error {
 		c.logger.Info("Warning: No source file found to trigger initial indexing - workspace/symbol queries may not work")
 	}
 
-	// When the on-disk index is already current, clangd may not emit any
-	// background-indexing progress. Unblock WaitForIndexing after a short grace
-	// period so startup does not hang in that case.
-	go func() {
-		time.Sleep(3 * time.Second)
-		c.indexingMu.Lock()
-		defer c.indexingMu.Unlock()
-		if !c.isIndexing {
-			c.logger.Debug("No background indexing progress observed, assuming index is ready")
-			c.signalIndexingDoneLocked()
-		}
-	}()
-
 	return nil
 }
 
@@ -367,12 +354,76 @@ func (c *ClangdClient) handleLogMessage(params json.RawMessage) {
 
 // WaitForIndexing blocks until clangd reports that background indexing has
 // finished, or until indexingTimeout elapses.
+//
+// The JSON-RPC transport only reads clangd stdout while a request is in flight.
+// Background indexing progress arrives as notifications on stdout, so we must
+// keep issuing lightweight requests until indexing completes; otherwise clangd's
+// stdout pipe fills up and background indexing stalls.
 func (c *ClangdClient) WaitForIndexing() {
+	select {
+	case <-c.indexingDone:
+		return
+	default:
+	}
+
+	stopDrain := make(chan struct{})
+	go c.drainTransportUntil(stopDrain)
+
+	// When the on-disk index is already current, clangd may not emit any
+	// background-indexing progress. Only apply this fallback while stdout is
+	// being drained so progress notifications are not stuck unread in the pipe.
+	go func() {
+		time.Sleep(3 * time.Second)
+		c.indexingMu.Lock()
+		defer c.indexingMu.Unlock()
+		if !c.isIndexing {
+			c.logger.Debug("No background indexing progress observed, assuming index is ready")
+			c.signalIndexingDoneLocked()
+		}
+	}()
+
 	select {
 	case <-c.indexingDone:
 	case <-time.After(c.indexingTimeout):
 		c.logger.Info("Timed out waiting for background indexing after %v, proceeding anyway", c.indexingTimeout)
 	}
+
+	close(stopDrain)
+}
+
+// Keeps the JSON-RPC transport reading clangd stdout until stop is closed.
+// Any open document is enough for the lightweight poll request.
+func (c *ClangdClient) drainTransportUntil(stop <-chan struct{}) {
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-stop:
+			return
+		case <-ticker.C:
+			uri := c.anyOpenDocumentURI()
+			if uri == "" {
+				continue
+			}
+			_, err := c.sendRequest("textDocument/documentSymbol", DocumentSymbolParams{
+				TextDocument: TextDocumentIdentifier{URI: uri},
+			})
+			if err != nil {
+				return
+			}
+		}
+	}
+}
+
+// Returns the URI of any document currently open in clangd.
+func (c *ClangdClient) anyOpenDocumentURI() string {
+	c.docMu.RLock()
+	defer c.docMu.RUnlock()
+	for uri := range c.openDocuments {
+		return uri
+	}
+	return ""
 }
 
 // Sends a request to clangd and waits for the response.
