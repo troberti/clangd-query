@@ -131,6 +131,10 @@ func findProjectRoot(startDir string) (string, error) {
 			return dir, nil
 		}
 
+		if _, err := os.Stat(filepath.Join(dir, "compile_commands.json")); err == nil {
+			return dir, nil
+		}
+
 		parent := filepath.Dir(dir)
 		if parent == dir {
 			break

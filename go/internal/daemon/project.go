@@ -19,6 +19,11 @@ func FindProjectRoot(startDir string) (string, error) {
 			return dir, nil
 		}
 
+		cmdPath := filepath.Join(dir, "compile_commands.json")
+		if _, err := os.Stat(cmdPath); err == nil {
+			return dir, nil
+		}
+
 		parent := filepath.Dir(dir)
 		if parent == dir {
 			// Reached root of filesystem

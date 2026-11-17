@@ -186,7 +186,7 @@ int GetWindowHeight() const
 - Go 1.21 or higher for building
 - `clangd` must be installed on your system. Version 15+ recommended for full feature support
 - CMake-based C++ project (for compile_commands.json generation).
-- Your C++ project must have `CMakeLists.txt` at the project root. The tool automatically detects your C++ project by looking for `CMakeLists.txt` in parent directories. Run `clangd-query` from anywhere within your project tree.
+- Your C++ project must have `CMakeLists.txt` or `compile_commands.json` at the project root. The tool automatically detects your C++ project by looking for `CMakeLists.txt` or `compile_commands.json` in parent directories. Run `clangd-query` from anywhere within your project tree.
 
 ## Installation
 

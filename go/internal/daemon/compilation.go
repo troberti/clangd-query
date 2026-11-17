@@ -25,6 +25,13 @@ func EnsureCompilationDatabase(projectRoot string, log logger.Logger) (string, e
 		return "", fmt.Errorf("failed to create build directory: %v", err)
 	}
 
+	// check if project already has a compile_commands.json
+	projectCommandsPath := filepath.Join(projectRoot, "compile_commands.json");
+	if _, err := os.Stat(projectCommandsPath); err == nil {
+		os.Symlink(projectCommandsPath, compileCommandsPath);
+		return buildDir, nil
+	}
+
 	// Run CMake to generate compile_commands.json
 	log.Info("Generating compile_commands.json in %s...", buildDir)
 
